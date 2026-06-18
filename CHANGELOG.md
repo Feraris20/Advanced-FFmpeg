@@ -2,6 +2,63 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.35 - 2026-06-19
+
+- Passed the generated dry-run batch file to FFAStrans as `s_source` when batch export is enabled.
+
+## 0.0.34 - 2026-06-19
+
+- Changed dry-run batch export to use the planned media output path with a `.cmd` extension.
+
+## 0.0.33 - 2026-06-19
+
+- Made Dry Run enforce null output in the saved generated command and processor execution path.
+- Updated dry-run success output to clearly state that no output file is produced.
+
+## 0.0.32 - 2026-06-19
+
+- Added dry-run execution options, including optional resolved `.cmd` batch export.
+- Expanded the Compatibility Summary with video/audio bitrate, language, rate, channel, and dry-run details.
+- Sorted Video Language like Audio Language and moved it to the final Video settings position.
+
+## 0.0.31 - 2026-06-19
+
+- Kept FFmpeg Path help visible by anchoring it outside the mode-dependent picker controls.
+
+## 0.0.30 - 2026-06-19
+
+- Changed watermark image looping to use `-stream_loop -1` and `overlay=shortest=1` for PNG/GIF-compatible overlay behavior.
+- Restored the FFmpeg Path help button with a stable visible target.
+- Moved Video Language to the end of the Video tab's left-side settings list.
+
+## 0.0.29 - 2026-06-19
+
+- Fixed watermark command ordering so all inputs are declared before output metadata options.
+- Looped watermark image inputs so static images survive resized overlay workflows.
+- Reworked Filters tab field widths so picker buttons and help buttons align consistently.
+
+## 0.0.28 - 2026-06-19
+
+- Added a project README with usage, file layout, preset, and development notes.
+- Standardized General and Filters tab control widths.
+- Refined Filters tab grids, opacity controls, help placement, and CRF slider sizing.
+
+## 0.0.27 - 2026-06-19
+
+- Added an Options-tab compatibility summary with current container, codec, filter, and warning details.
+- Allowed broader FFAStrans variable selection for custom framerate and video bitrate.
+- Refined Video tab and Filters tab control/help alignment.
+
+## 0.0.26 - 2026-06-19
+
+- Added `Advanced-FFmpeg in FFAStrans` writing-application metadata for Matroska/WebM outputs.
+- Moved Video Language to the bottom of the Video tab.
+
+## 0.0.25 - 2026-06-18
+
+- Removed manual encoded/tagged date controls from the Advanced tab.
+- Added runtime date metadata tagging for containers that support it.
+
 ## 0.0.24 - 2026-06-18
 
 - Added a WebM container option and matching audio/video codec lists.

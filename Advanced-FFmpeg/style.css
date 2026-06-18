@@ -16,6 +16,10 @@
             width: 260px;
         }
 
+        select.ffas-text-input {
+            width: 260px;
+        }
+
         .ffas-checkbox-row {
             display: flex;
             align-items: center;
@@ -32,6 +36,9 @@
         .ffas-help-wrap {
             display: inline-block;
             position: relative;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
             margin-left: 6px;
             margin-right: 4px;
             vertical-align: middle;
@@ -52,6 +59,7 @@
             text-align: center;
             cursor: pointer;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+            vertical-align: middle;
         }
 
         .ffas-help-popup {
@@ -143,6 +151,14 @@
             border: 1px solid #ccc;
             box-sizing: border-box;
             word-wrap: break-word;
+        }
+
+        .compatibility-summary-output {
+            width: 680px;
+            height: 145px;
+            margin-bottom: 10px;
+            color: #d7ffd7;
+            resize: none;
         }
 
         .preset-json-output {
@@ -288,6 +304,10 @@
             column-gap: 20px;
         }
 
+        .video-language-bottom-row {
+            margin-top: 5px;
+        }
+
         body {
             background-color: #f0f0f0;
             visibility: hidden;
@@ -302,13 +322,24 @@
             display: none;
         }
 
+        #FFmpegPath {
+            width: 198px;
+        }
+
+        #FFmpegPathStatus {
+            display: inline-block;
+            width: 14px;
+            margin-left: 4px;
+            text-align: center;
+        }
+
         /* slider start */
 
         .quality-slider-wrap {
             display: inline-block;
             position: relative;
 
-            width: 264px;
+            width: 260px;
             height: 44px;
             padding: 0 10px;
             box-sizing: border-box;
@@ -327,13 +358,13 @@
             top: 1px;
             left: 10px;
 
-            width: 268px;
+            width: 242px;
             height: 24px;
             padding: 0;
         }
 
         .quality-slider {
-            width: 205px;
+            width: 193px;
         }
 
         .quality-slider-labels {
@@ -344,7 +375,7 @@
             left: 10px;
             bottom: 2px;
 
-            width: 265px;
+            width: 242px;
             margin: 0;
 
             font-family: sans-serif;
@@ -404,10 +435,20 @@
             font-size: 12px;
         }
 
-        #QualityDescriptions {
+        .quality-edge-label {
             color: #021c6d;
             font-weight: bold;
             font-size: 10px;
+        }
+
+        .quality-edge-label-right {
+            text-align: left;
+            margin-left: -6px;
+        }
+
+        .quality-slider-wrap + .ffas-help-wrap {
+            margin-top: 12px;
+            vertical-align: top;
         }
 
         /* slider end */
@@ -472,13 +513,50 @@
             height: 90px;
             table-layout: fixed;
             padding: 4px;
-            border: 1px solid #ccc;
-            background: #f5f5f5;
+            border: 1px solid #9aa4b2;
+            background: #d8dde6;
             box-sizing: border-box;
         }
 
         #WatermarkPositionGrid {
-            width: 290px;
+            width: 260px;
+        }
+
+        #TabFilters .ffas-help-wrap {
+            vertical-align: middle;
+        }
+
+        #TabFilters .tc-position + .ffas-help-wrap {
+            margin-top: 35px;
+            vertical-align: top;
+        }
+
+        #TabFilters input[type="range"] + span + .ffas-help-wrap {
+            vertical-align: middle;
+        }
+
+        #TabFilters .ffas-text-input,
+        #TabFilters select.ffas-text-input {
+            width: 260px;
+        }
+
+        #TabFilters input[type="submit"] {
+            width: 28px;
+            height: 24px;
+            padding: 0;
+            box-sizing: border-box;
+            vertical-align: middle;
+        }
+
+        #TabFilters #ScaleWidth,
+        #TabFilters #ScaleHeight,
+        #TabFilters #WatermarkXOffset,
+        #TabFilters #WatermarkYOffset {
+            width: 226px;
+        }
+
+        #TabFilters #WatermarkPath {
+            width: 194px;
         }
 
         .tc-position td {
@@ -489,13 +567,15 @@
             vertical-align: middle;
         }
 
-        #TCSettings input[type="range"] {
+        #TCSettings input[type="range"],
+        #WatermarkSettings input[type="range"] {
             width: 210px;
             vertical-align: middle;
         }
 
         #TCBackgroundValue,
-        #TCForegroundValue {
+        #TCForegroundValue,
+        #WatermarkOpacityValue {
             display: inline-block;
             width: 35px;
             font-family: sans-serif;
@@ -565,7 +645,7 @@
         body.theme-video .ffas-label-left,
         body.theme-video .quality-number,
         body.theme-video #QualityDescription,
-        body.theme-video #QualityDescriptions {
+        body.theme-video .quality-edge-label {
             color: #00C2FF;
         }
 
@@ -592,8 +672,8 @@
 
         body.theme-video .quality-slider-wrap,
         body.theme-video .tc-position {
-            background: #0F172A;
-            border-color: #94A3B8;
+            background: #334155;
+            border-color: #64748B;
         }
 
         body.theme-video .ffas-help-button {
@@ -636,7 +716,7 @@
         body.theme-ffmpeg .ffas-label-left,
         body.theme-ffmpeg .quality-number,
         body.theme-ffmpeg #QualityDescription,
-        body.theme-ffmpeg #QualityDescriptions {
+        body.theme-ffmpeg .quality-edge-label {
             color: #A3E635;
         }
 
@@ -663,7 +743,7 @@
 
         body.theme-ffmpeg .quality-slider-wrap,
         body.theme-ffmpeg .tc-position {
-            background: #111827;
+            background: #374151;
             border-color: #7CB342;
         }
 
@@ -703,7 +783,7 @@
         body.theme-monitoring .ffas-label-left,
         body.theme-monitoring .quality-number,
         body.theme-monitoring #QualityDescription,
-        body.theme-monitoring #QualityDescriptions {
+        body.theme-monitoring .quality-edge-label {
             color: #3B82F6;
         }
 
@@ -730,7 +810,7 @@
 
         body.theme-monitoring .quality-slider-wrap,
         body.theme-monitoring .tc-position {
-            background: #0B1020;
+            background: #273449;
             border-color: #8B5CF6;
         }
 
@@ -770,7 +850,7 @@
         body.theme-dark .ffas-label-left,
         body.theme-dark .quality-number,
         body.theme-dark #QualityDescription,
-        body.theme-dark #QualityDescriptions {
+        body.theme-dark .quality-edge-label {
             color: #ffffff;
         }
 
@@ -797,8 +877,8 @@
 
         body.theme-dark .quality-slider-wrap,
         body.theme-dark .tc-position {
-            background: #333333;
-            border-color: #555555;
+            background: #4a4a4a;
+            border-color: #777777;
         }
 
         body.theme-dark .ffas-help-button {
@@ -857,7 +937,7 @@
         body.theme-contrast .ffas-label-left,
         body.theme-contrast .quality-number,
         body.theme-contrast #QualityDescription,
-        body.theme-contrast #QualityDescriptions {
+        body.theme-contrast .quality-edge-label {
             color: #ffff00;
         }
 
@@ -884,7 +964,7 @@
 
         body.theme-contrast .quality-slider-wrap,
         body.theme-contrast .tc-position {
-            background: #000000;
+            background: #333333;
             border: 2px solid #ffffff;
         }
 

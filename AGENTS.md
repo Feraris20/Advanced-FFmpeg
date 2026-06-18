@@ -8,6 +8,7 @@
 - Processor script: `bin/processor.ps1`
 - Node metadata: `node.json`
 - Help page: `help.html`
+- Project readme: `README.md`
 
 The UI targets FFAStrans' embedded IE11 environment. Keep JavaScript and CSS IE11-friendly.
 
@@ -44,7 +45,7 @@ Use the sibling `ffprobe.exe` from the same folder for local probing/tests.
   - an FFmpeg directory
   - an FFAStrans variable such as `%s_var%`
 - `bin/processor.ps1` validates the expanded FFmpeg path and expects `ffprobe.exe` next to `ffmpeg.exe`.
-- The processor sets `s_source` to the encoded output path.
+- The processor sets `s_source` to the encoded output path. In dry-run batch mode, `s_source` is the generated `.cmd` batch file instead.
 - On failure, use `Exit-WithError`, which writes `s_job_error_msg`.
 
 ## Command Generation Notes
@@ -80,6 +81,9 @@ Use the sibling `ffprobe.exe` from the same folder for local probing/tests.
 - MP4 and MOV offer `VideoCodec=none` for audio-only output; command generation emits `-vn` and video-only controls should be hidden.
 - ProRes uses `prores_ks`; do not emit generic CRF/ABR/2-pass options or x264/x265 private options for ProRes.
 - ProRes profile choices are Proxy, LT, Standard, HQ, 4444, and 4444 XQ; Standard is selected by default and emits `-profile:v standard`.
+- Encoded/tagged date controls should not be exposed in the UI. The UI adds `__RUNTIME_ISO_DATE__` metadata placeholders only for supported containers, and `bin/processor.ps1` replaces them at execution time.
+- Container writing-application metadata is set to `Advanced-FFmpeg in FFAStrans` for MKV/WebM only; MP4/MOV keep FFmpeg's muxer `Lavf...` encoder tag.
+- Video Language should appear at the bottom of the Video tab.
 - `Force CFR` lives in the Advanced tab as a `Default` / `On` dropdown. `Default` must not add any FFmpeg option; `On` adds `-vsync cfr`.
 
 ## Audio Behavior
@@ -98,9 +102,16 @@ Use the sibling `ffprobe.exe` from the same folder for local probing/tests.
 - `ffas_save_preset()` still returns base64-encoded JSON for FFAStrans.
 - The Options tab exports readable JSON to a file and imports readable JSON from a file using the same schema.
 - Opening the Options tab should refresh the Preset JSON textarea from the current UI values.
+- The Options tab includes a read-only Compatibility Summary for current container, codec, filter, and warning details.
+- Compatibility Summary should include practical delivery settings such as video/audio bitrate, languages, sample rate, channels, filters, and dry-run state.
 - Reject presets with a newer `presetSchemaVersion` than the UI supports.
 - The Options tab should stay on the right side of the tab bar.
 - Do not re-add the visible FFAStrans Output Variables section; processor outputs are written by `bin/processor.ps1`.
+- Options include `DryRunMode` and `DryRunSaveBatch`.
+- Dry Run On must make `GeneratedCommand` end with `-f null NUL` in the UI, so FFAStrans cannot accidentally execute a media-output command.
+- `bin/processor.ps1` also treats commands already ending in `-f null NUL` as dry-run after FFAStrans variables and runtime placeholders are resolved.
+- Dry-run success messages must clearly say that dry run was enabled and no output file was produced.
+- When `DryRunSaveBatch=on`, the processor writes the batch file beside the planned media output using the same base filename and a `.cmd` extension, outputs `s_dryrun_batch`, and passes that batch file as `s_source` for downstream FFAStrans processing.
 
 ## Video Filters
 
@@ -112,6 +123,7 @@ Use the sibling `ffprobe.exe` from the same folder for local probing/tests.
 - `WatermarkXOffset` and `WatermarkYOffset` accept numbers or FFAStrans variables.
 - Watermark resize is applied after the base video filter chain, so `fit source` uses the post-Scale dimensions.
 - Watermark requires video re-encoding and should be hidden/ignored when `VideoCodec=copy`.
+- Watermark image inputs are added with `-stream_loop -1` before `-i` and the overlay filter uses `shortest=1`, so static and animated image watermarks can continue while the output ends with the main source.
 - When watermark uses `-filter_complex`, map filtered video with `-map "[vout]"` and optional source audio with `-map 0:a?`.
 
 ## Numeric Variable Fields
@@ -129,7 +141,7 @@ Use the sibling `ffprobe.exe` from the same folder for local probing/tests.
 - Built-in font choices are Arial, Calibri, Consolas, Courier New, and Tahoma.
 - Custom installed font names add `font='...'`; no extension is needed for installed font names.
 - Custom full font paths add `fontfile='...'`; full paths should include the font extension such as `.ttf`, `.otf`, or `.ttc`.
-- Sort `AudioLanguage` by visible language name, not ISO code.
+- Sort `AudioLanguage` and `VideoLanguage` by visible language name, not ISO code.
 - If `Use original media start timecode` is checked, the UI inserts `__SOURCE_TC__` into the command.
 - `bin/processor.ps1` replaces `__SOURCE_TC__` at execution by probing source timecode with `ffprobe`.
 - The visible label for `TCStart` is `Start Timecode`.

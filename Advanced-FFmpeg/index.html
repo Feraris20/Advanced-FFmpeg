@@ -76,8 +76,9 @@
             toggleAudioOptions();
             toggleGeneratedCommand();
             applyTheme();
+            moveVideoLanguageToBottom();
             initOptionHelp();
-            sortAudioLanguages();
+            sortLanguageDropdowns();
             updateCodecIdOptions();
             captureDefaultValues();
             updateCommand();
@@ -98,8 +99,7 @@
                 "WatermarkResize", "WatermarkOpacity",
                 "ColorMode", "FramePacking", "OpenGOP", "KeyframeInt", "MinGOP", "DisplayMode",
                 "AudioCodec", "AudioTrackName", "AudioDelay", "AudioLanguage", "AudioBitrate", "AudioChannels", "AudioSampleRate",
-                "EncodedDate", "TaggedDate",
-                "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
+                "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "DryRunMode", "DryRunSaveBatch", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
                 "TCEnable", "TCStart", "TCUseSource", "TCSourceFallback", "TCFPS", "TCFont", "TCFontCustom", "TCPosition", "TCSize", "TCSizeCustom",
                 "TCBackgroundOpacity", "TCForegroundOpacity"
             ];
@@ -293,14 +293,15 @@
             toggleAudioOptions();
             toggleGeneratedCommand();
             applyTheme();
+            moveVideoLanguageToBottom();
             initOptionHelp();
-            sortAudioLanguages();
+            sortLanguageDropdowns();
             updateCodecIdOptions();
             initOptionHelp();
             updateCommand();
         }
 
-        // 3. Robust Preset Loader
+        
         function ffas_load_preset(base64_string) {
             try {
                 captureDefaultValues();
@@ -494,6 +495,143 @@
             if (box) {
                 box.value = getPresetJsonString(true);
             }
+
+            updateCompatibilitySummary();
+        }
+
+        function getSelectedText(id) {
+            var el = document.getElementById(id);
+
+            if (!el || !el.options || el.selectedIndex < 0) {
+                return "";
+            }
+
+            return el.options[el.selectedIndex].text;
+        }
+
+        function getInputValue(id) {
+            var el = document.getElementById(id);
+            return el ? el.value : "";
+        }
+
+        function isInputChecked(id) {
+            var el = document.getElementById(id);
+            return el ? el.checked : false;
+        }
+
+        function buildCompatibilitySummary() {
+            var format = getInputValue("Format") || "mp4";
+            var videoCodec = getInputValue("VideoCodec");
+            var audioCodec = getInputValue("AudioCodec");
+            var rateControl = getInputValue("RateControl");
+            var videoBitrate = getInputValue("VideoBitrate");
+            var crfValue = getInputValue("CRF");
+            var framerateMode = getInputValue("Framerate");
+            var framerateText = framerateMode === "custom" ? getInputValue("FramerateCustom") : getSelectedText("Framerate");
+            var audioBitrate = getInputValue("AudioBitrate");
+            var audioSampleRate = getSelectedText("AudioSampleRate");
+            var audioChannels = getSelectedText("AudioChannels");
+            var audioDelay = getInputValue("AudioDelay");
+            var dryRunMode = getInputValue("DryRunMode");
+            var dryRunSaveBatch = getInputValue("DryRunSaveBatch");
+            var scale = getInputValue("Scale");
+            var watermarkEnabled = isInputChecked("WatermarkEnable");
+            var timecodeEnabled = isInputChecked("TCEnable");
+            var lines = [];
+            var warnings = [];
+
+            lines.push("Container: " + getSelectedText("Format"));
+            lines.push("Video codec: " + getSelectedText("VideoCodec"));
+
+            if (videoCodec !== "none" && videoCodec !== "copy" && codecUsesGenericRateControl(videoCodec)) {
+                lines.push("Rate control: " + getSelectedText("RateControl"));
+                if (rateControl === "abr" || rateControl === "2pass") {
+                    lines.push("Video bitrate: " + (videoBitrate !== "" ? videoBitrate : "1500k"));
+                } else {
+                    lines.push("Video quality value: " + (crfValue !== "" ? crfValue : "23"));
+                }
+            } else if (videoCodec === "copy") {
+                lines.push("Rate control: not used with video copy");
+            } else if (videoCodec === "none") {
+                lines.push("Video output: disabled");
+            } else {
+                lines.push("Rate control: codec-managed");
+            }
+
+            if (videoCodec !== "none") {
+                lines.push("Video language: " + getSelectedText("VideoLanguage"));
+                lines.push("Framerate: " + (framerateText !== "" ? framerateText : "Keep original"));
+                lines.push("Color mode: " + getSelectedText("ColorMode"));
+            }
+
+            lines.push("");
+            lines.push("Audio codec: " + getSelectedText("AudioCodec"));
+
+            if (audioCodec === "none") {
+                lines.push("Audio output: disabled");
+            } else if (audioCodec === "copy") {
+                lines.push("Audio bitrate: not used with audio copy");
+                lines.push("Audio language: " + getSelectedText("AudioLanguage"));
+            } else {
+                lines.push("Audio bitrate: " + (audioBitrate !== "" ? audioBitrate : "codec default"));
+                lines.push("Sample rate: " + (audioSampleRate !== "" ? audioSampleRate : "Default"));
+                lines.push("Channels: " + (audioChannels !== "" ? audioChannels : "Default"));
+                lines.push("Audio language: " + getSelectedText("AudioLanguage"));
+                lines.push("Audio delay: " + (audioDelay !== "" ? audioDelay + " ms" : "0 ms"));
+            }
+
+            lines.push("");
+
+            if (scale && scale !== "") {
+                lines.push("Scale: " + (scale === "custom" ? "Custom" : getSelectedText("Scale")));
+            } else {
+                lines.push("Scale: off");
+            }
+
+            if (watermarkEnabled) {
+                lines.push("Watermark: enabled");
+                if (videoCodec === "copy" || videoCodec === "none") {
+                    warnings.push("Watermark requires video re-encoding and will be ignored with Copy or No Video.");
+                }
+            } else {
+                lines.push("Watermark: off");
+            }
+
+            lines.push("Timecode burn-in: " + (timecodeEnabled ? "enabled" : "off"));
+            lines.push("");
+            lines.push("Dry run: " + (dryRunMode === "on" ? "enabled - no output file will be created" : "off"));
+            lines.push("Dry-run batch file: " + (dryRunSaveBatch === "on" ? "save resolved .cmd file" : "off"));
+
+            if (videoCodec === "copy" && (scale !== "" || watermarkEnabled || timecodeEnabled)) {
+                warnings.push("Video filters require re-encoding, so they do not apply when Video Codec is Copy.");
+            }
+
+            if (format === "ts") {
+                warnings.push("MPEG-TS does not receive runtime date metadata.");
+            }
+
+            if (audioCodec === "copy" && audioDelay !== "" && audioDelay !== "0") {
+                warnings.push("Audio delay is ignored with audio copy.");
+            }
+
+            if (warnings.length > 0) {
+                lines.push("");
+                lines.push("Warnings:");
+
+                for (var i = 0; i < warnings.length; i++) {
+                    lines.push("- " + warnings[i]);
+                }
+            }
+
+            return lines.join("\r\n");
+        }
+
+        function updateCompatibilitySummary() {
+            var box = document.getElementById("CompatibilitySummary");
+
+            if (box) {
+                box.value = buildCompatibilitySummary();
+            }
         }
 
         function toggleGeneratedCommand() {
@@ -678,9 +816,21 @@
                 chain += "[wm];[vbase][wm]overlay=";
             }
 
-            chain += getWatermarkOverlayPosition(watermarkPosition, watermarkXOffset, watermarkYOffset) + "[vout]";
+            chain += getWatermarkOverlayPosition(watermarkPosition, watermarkXOffset, watermarkYOffset) + ":shortest=1[vout]";
 
             return chain;
+        }
+
+        function convertCommandToDryRun(commandText) {
+            if (!commandText) {
+                return commandText;
+            }
+
+            if (/\s-f\s+null\s+NUL\s*$/i.test(commandText)) {
+                return commandText;
+            }
+
+            return commandText.replace(/\s+"[^"]+"\s*$/, " -f null NUL");
         }
 
         function updateCommand() {
@@ -748,9 +898,6 @@
                 var aBitrate = getVal("AudioBitrate");
                 var aChannels = getVal("AudioChannels");
                 var aSampleRate = getVal("AudioSampleRate");
-                var encodedDate = getVal("EncodedDate");
-                var taggedDate = getVal("TaggedDate");
-
                 var hwAccel = getVal("HWAccel");
                 var threads = getVal("Threads");
                 var threadsIsValid = validateNumberOrVariable(document.getElementById("Threads"), true, false);
@@ -759,6 +906,7 @@
                 var brand = getVal("Brand");
                 var codecId = getVal("CodecID");
                 var extraArgs = getVal("ExtraArgs");
+                var dryRunMode = getVal("DryRunMode");
 
                 // Dynamic UI visibility and label updating
                 var rcBitrateBox = document.getElementById("rc_bitrate_box");
@@ -852,10 +1000,9 @@
 
                 if (hwAccel !== "") cmd += " -hwaccel " + hwAccel;
                 cmd += " -i \"%s_source%\"";
-                cmd += " -map_metadata -1 -map_chapters -1";
 
                 if (watermarkEnabled && watermarkPath !== "" && watermarkPathIsValid && vCodec !== "copy" && vCodec !== "none") {
-                    cmd += ' -i "' + watermarkPath.replace(/"/g, '\\"') + '"';
+                    cmd += ' -stream_loop -1 -i "' + watermarkPath.replace(/"/g, '\\"') + '"';
                 }
 
                 // --- VIDEO ---
@@ -938,7 +1085,7 @@
                 }
 
                 var audioCmd = "";
-                var finalOutputOptions = "";
+                var finalOutputOptions = " -map_metadata -1 -map_chapters -1";
 
                 // --- AUDIO ---
                 if (aCodec === "none") {
@@ -967,8 +1114,13 @@
                 if (vCodec !== "none" && vLang !== "" && vLang !== "none") finalOutputOptions += ' -metadata:s:v:0 language=' + vLang;
                 if (vCodec !== "none") finalOutputOptions += ' -metadata:s:v:0 encoder="Advanced-FFmpeg"';
                 if (aCodec !== "none") finalOutputOptions += ' -metadata:s:a:0 encoder="Advanced-FFmpeg"';
-                if (encodedDate !== "") finalOutputOptions += ' -metadata creation_time="' + encodedDate.replace(/"/g, '\\"') + '"';
-                if (taggedDate !== "") finalOutputOptions += ' -metadata tagged_date="' + taggedDate.replace(/"/g, '\\"') + '"';
+                if (format === "mkv" || format === "webm") finalOutputOptions += ' -metadata writing_application="Advanced-FFmpeg in FFAStrans"';
+                if (format === "mp4" || format === "mov" || format === "mkv" || format === "webm") {
+                    finalOutputOptions += ' -metadata creation_time="__RUNTIME_ISO_DATE__"';
+                }
+                if (format === "mp4" || format === "mov") {
+                    finalOutputOptions += ' -metadata tagged_date="__RUNTIME_ISO_DATE__"';
+                }
                 if ((format === "mp4" || format === "mov") && faststart === "on") finalOutputOptions += " -movflags +faststart";
                 if (format === "mp4" && brand !== "" && brand !== "default") finalOutputOptions += " -brand " + brand;
                 if (format === "mp4" && codecId !== "" && codecId !== "default") finalOutputOptions += " -tag:v " + codecId;
@@ -988,8 +1140,13 @@
 
                 document.getElementById("OutputFilePath").value = outputPath;
 
+                if (dryRunMode === "on") {
+                    cmd = convertCommandToDryRun(cmd);
+                }
+
                 var outEl = document.getElementById("GeneratedCommand");
                 if (outEl) outEl.value = cmd;
+                updateCompatibilitySummary();
 
             } catch (err) { }
         }
@@ -1466,8 +1623,8 @@
             toggleAudioOptions();
         }
 
-        function sortAudioLanguages() {
-            var languageSelect = document.getElementById("AudioLanguage");
+        function sortLanguageSelect(id) {
+            var languageSelect = document.getElementById(id);
 
             if (!languageSelect || languageSelect.options.length < 2) {
                 return;
@@ -1506,6 +1663,11 @@
             if (languageSelect.value !== currentValue) {
                 languageSelect.value = "none";
             }
+        }
+
+        function sortLanguageDropdowns() {
+            sortLanguageSelect("AudioLanguage");
+            sortLanguageSelect("VideoLanguage");
         }
 
         function updateCodecs() {
@@ -2440,7 +2602,7 @@
         var FFMPEG_DOC_BASE = "https://ffmpeg.org/";
         var OPTION_HELP_ITEMS = [
             { id: "FFmpegMode", title: "FFmpeg Engine", text: "Choose FFAStrans internal FFmpeg or an external executable. FFmpeg options are applied to the next input or output file, so the selected binary must support the command we build.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Description" },
-            { id: "FFmpegPath", title: "FFmpeg Path", text: "External FFmpeg can be a path to ffmpeg.exe, a folder, or an FFAStrans variable that expands before execution. ffprobe.exe is expected beside ffmpeg.exe.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Synopsis" },
+            { id: "FFmpegPath", targetId: "FFmpegPathHelpAnchor", title: "FFmpeg Path", text: "External FFmpeg can be a path to ffmpeg.exe, a folder, or an FFAStrans variable that expands before execution. ffprobe.exe is expected beside ffmpeg.exe.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Synopsis" },
             { id: "Format", title: "Container Format", text: "The container muxer controls how encoded streams are written. MP4, MOV, TS, MKV, and WebM rebuild codec choices to keep the command container-aware.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
             { id: "VideoCodec", title: "Video Codec", text: "Sets the video encoder with -c:v. Copy mode stream-copies packets without decoding. No Video writes -vn and creates an audio-only file when the container and source audio allow it.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
             { id: "RateControl", title: "Rate Control", text: "Controls bitrate or quality strategy. ABR uses -b:v, 2-pass uses -pass, CRF uses quality-based encoding, and QP/CQ uses encoder quantizer control.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
@@ -2485,8 +2647,6 @@
             { id: "AudioDelay", title: "Audio Delay", text: "For encoded audio, uses the adelay filter to delay samples by milliseconds.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#adelay" },
             { id: "AudioLanguage", title: "Language", text: "Writes stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "VideoLanguage", title: "Video Language", text: "Writes the video stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
-            { id: "EncodedDate", title: "Encoded Date", text: "Writes the output file's encoded date metadata when provided.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
-            { id: "TaggedDate", title: "Tagged Date", text: "Writes the output file's tagged date metadata when provided.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "Threads", title: "Threads", text: "Sets FFmpeg thread count when supported. Leaving it empty or zero lets FFmpeg decide.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
             { id: "HWAccel", title: "Hardware Acceleration", text: "Adds -hwaccel for supported decoding acceleration. Actual support depends on the local FFmpeg build and hardware.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
             { id: "OpenGOP", title: "Open GOP", text: "Encoder private setting for supported x264/x265 encoders. Default emits no option.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
@@ -2496,7 +2656,10 @@
             { id: "ForceCFR", title: "Force CFR", text: "Adds -vsync cfr to force constant frame-rate timestamp generation.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
             { id: "ExtraArgs", title: "Extra Arguments", text: "Appends raw FFmpeg arguments. FFmpeg options are order-sensitive, so only add options valid for this output.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Options" },
             { id: "CommandVisibility", title: "Generated Command", text: "Shows or hides this node's command preview. It is UI-only and does not add an FFmpeg argument." },
+            { id: "DryRunMode", title: "Dry Run", text: "Runs a resolved FFmpeg test command that writes to the null muxer instead of creating the final output file. This checks decoding, filters, mapping, and encoding without delivering media.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#null" },
+            { id: "DryRunSaveBatch", title: "Dry Run Batch", text: "During execution, saves the resolved dry-run command as a .cmd file beside the planned media output, using the same base filename with a .cmd extension." },
             { id: "Theme", title: "Theme", text: "Changes only the editor appearance. It is UI-only and does not add an FFmpeg argument." },
+            { id: "CompatibilitySummary", title: "Compatibility Summary", text: "Shows the selected container, codecs, filters, and warnings for settings that require re-encoding or are ignored by the current mode." },
             { id: "PresetJson", targetId: "PresetJsonImportBtn", title: "Preset JSON", text: "Exports and imports this node's saved UI settings as JSON. This is UI preset data, not an FFmpeg command option." }
         ];
 
@@ -2547,6 +2710,14 @@
                 return;
             }
 
+            var node = el;
+            while (node) {
+                if (node.id === "TabFilters") {
+                    return;
+                }
+                node = node.parentNode;
+            }
+
             var type = el.type ? el.type.toLowerCase() : "";
 
             if (type !== "text" && type !== "") {
@@ -2585,6 +2756,46 @@
             } else {
                 target.parentNode.appendChild(newNode);
             }
+        }
+
+        function moveVideoLanguageToBottom() {
+            var tab = document.getElementById("TabVideo");
+            var selectEl = document.getElementById("VideoLanguage");
+            var grid = tab ? tab.getElementsByClassName("form-grid")[0] : null;
+            var columns = [];
+
+            if (grid) {
+                for (var i = 0; i < grid.children.length; i++) {
+                    if (grid.children[i].tagName && grid.children[i].tagName.toLowerCase() === "div") {
+                        columns.push(grid.children[i]);
+                    }
+                }
+            }
+
+            var targetColumn = columns.length > 1 ? columns[1] : columns[0];
+
+            if (!tab || !selectEl || !targetColumn || document.getElementById("VideoLanguageBottomRow")) {
+                return;
+            }
+
+            var label = findOptionHelpLabel(selectEl);
+            var helpWrap = document.getElementById("OptionHelpWrap_VideoLanguage");
+            var br = selectEl.nextSibling;
+
+            while (br && !(br.nodeType === 1 && br.tagName && br.tagName.toLowerCase() === "br")) {
+                br = br.nextSibling;
+            }
+
+            var row = document.createElement("div");
+            row.id = "VideoLanguageBottomRow";
+            row.className = "video-language-bottom-row";
+
+            if (label) row.appendChild(label);
+            row.appendChild(selectEl);
+            if (helpWrap) row.appendChild(helpWrap);
+            if (br && br.parentNode) br.parentNode.removeChild(br);
+
+            targetColumn.appendChild(row);
         }
 
         function isOptionHelpHidden(el, target) {
@@ -2746,8 +2957,9 @@
             toggleAudioOptions();
             toggleGeneratedCommand();
             applyTheme();
+            moveVideoLanguageToBottom();
             initOptionHelp();
-            sortAudioLanguages();
+            sortLanguageDropdowns();
             updateCodecIdOptions();
             captureDefaultValues();
             updateCommand();
@@ -2814,7 +3026,7 @@
         </div>
         <hr>
         <label class="ffas-label-left">FFmpeg Engine: </label>
-        <select class="ffas-text-input" id="FFmpegMode" onchange="toggleFFmpegMode()" style="width: 270px;">
+        <select class="ffas-text-input" id="FFmpegMode" onchange="toggleFFmpegMode()">
             <option value="internal" selected>Internal FFmpeg</option>
             <option value="external">External FFmpeg</option>
         </select>
@@ -2824,8 +3036,7 @@
 
         <label class="ffas-label-left">FFmpeg Path: </label>
         <input class="ffas-text-input" id="FFmpegPath" oninput="validateFFmpegPathField(this)"
-            onchange="validateFFmpegPathField(this)" placeholder="Path to ffmpeg.exe or %s_var%" value="%s_ffmpegx64%" disabled
-            style="width:270px; box-sizing:border-box;" />
+            onchange="validateFFmpegPathField(this)" placeholder="Path to ffmpeg.exe or %s_var%" value="%s_ffmpegx64%" disabled />
 
         <span id="FFmpegPathStatus" style="margin-left:6px; font-family:sans-serif; font-size:12px;"></span>
 
@@ -2834,6 +3045,7 @@
 
         <input style="width: 30px; padding: 0; font-weight: bold;" type="submit" value="..." name="open_filebrowser"
             data-parent="FFmpegPath" id="FFmpegPathAfter" />
+        <span id="FFmpegPathHelpAnchor"></span>
 
         <div class="section-title">Container Settings</div>
         <label class="ffas-label-left">Container Format: </label>
@@ -3065,6 +3277,8 @@
                     <label class="ffas-label-left">Bitrate: </label>
                     <input type="text" class="ffas-text-input" id="VideoBitrate" onkeyup="updateCommand()"
                         onchange="updateCommand()" value="1500k" />
+                    <input width="2px" type="submit" value="<" name="open_vars" data-parent="VideoBitrate"
+                        data-user_vars_only="false" id="VideoBitrateVarsBtn" />
                 </div>
 
                 <div id="rc_crf_box" style="display:none; margin-bottom:15px;">
@@ -3080,9 +3294,9 @@
                         </div>
 
                         <div class="quality-slider-labels">
-                            <span id="QualityDescriptions">Higher quality</span>
+                            <span class="quality-edge-label">Higher quality</span>
                             <span id="QualityDescription">High quality</span>
-                            <span id="QualityDescriptions">Smaller file</span>
+                            <span class="quality-edge-label quality-edge-label-right">Smaller file</span>
                         </div>
                     </div>
                 </div>
@@ -3177,7 +3391,7 @@
                         placeholder="25, 24000/1001, or %s_var%" />
 
                     <input width="2px" type="submit" value="<" name="open_vars" data-parent="FramerateCustom"
-                        data-user_vars_only="true" id="FramerateCustomVarsBtn" style="display:none;" />
+                        data-user_vars_only="false" id="FramerateCustomVarsBtn" style="display:none;" />
                 </span>
 
                 <br />
@@ -3776,18 +3990,6 @@
             <option value="on">On</option>
         </select><br />
 
-        <label class="ffas-label-left">Encoded Date: </label>
-        <input type="text" class="ffas-text-input" id="EncodedDate" onkeyup="updateCommand()"
-            onchange="updateCommand()" placeholder="YYYY-MM-DDTHH:MM:SSZ or %s_var%" />
-        <input width="2px" type="submit" value="<" name="open_vars" data-parent="EncodedDate"
-            data-user_vars_only="true" id="EncodedDateVarsBtn" /><br />
-
-        <label class="ffas-label-left">Tagged Date: </label>
-        <input type="text" class="ffas-text-input" id="TaggedDate" onkeyup="updateCommand()"
-            onchange="updateCommand()" placeholder="YYYY-MM-DDTHH:MM:SSZ or %s_var%" />
-        <input width="2px" type="submit" value="<" name="open_vars" data-parent="TaggedDate"
-            data-user_vars_only="true" id="TaggedDateVarsBtn" /><br />
-
         <label class="ffas-label-left">Extra Arguments: </label>
         <input type="text" class="ffas-text-input" id="ExtraArgs" onkeyup="updateCommand()" onchange="updateCommand()"
             placeholder="Additional FFmpeg arguments" /><br />
@@ -3805,6 +4007,18 @@
             <option value="shown">Shown</option>
         </select><br />
 
+        <label class="ffas-label-left">Dry Run:</label>
+        <select class="ffas-text-input" id="DryRunMode" onchange="updateCommand()">
+            <option value="off" selected>Off</option>
+            <option value="on">On - test without output file</option>
+        </select><br />
+
+        <label class="ffas-label-left">Dry Run Batch:</label>
+        <select class="ffas-text-input" id="DryRunSaveBatch" onchange="updateCommand()">
+            <option value="off" selected>Off</option>
+            <option value="on">Save .cmd file at execution</option>
+        </select><br />
+
         <label class="ffas-label-left">Theme:</label>
         <select class="ffas-text-input" id="Theme" onchange="applyTheme()">
             <option value="original" selected>Original</option>
@@ -3814,6 +4028,11 @@
             <option value="dark">Dark</option>
             <option value="contrast">High Contrast</option>
         </select><br />
+
+        <hr>
+
+        <div class="section-title">Compatibility Summary</div>
+        <textarea class="command-output compatibility-summary-output" id="CompatibilitySummary" readonly="readonly"></textarea>
 
         <hr>
 

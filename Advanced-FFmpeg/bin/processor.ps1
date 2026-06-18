@@ -158,6 +158,69 @@ function Write-ProcessorJson {
     Out-File -Encoding UTF8 -LiteralPath $input_json.processor_output_filepath
 }
 
+function Convert-ToDryRunCommand([string]$Command, [string]$OutputPath) {
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        throw "Generated command is empty."
+    }
+
+    if ($Command -match '(?i)(^|\s)-f\s+null\s+NUL\s*$') {
+        return $Command
+    }
+
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        throw "Output path is empty."
+    }
+
+    $escapedOutput = [regex]::Escape($OutputPath)
+    $patterns = @(
+        '"' + $escapedOutput + '"\s*$',
+        $escapedOutput + '\s*$'
+    )
+
+    foreach ($pattern in $patterns) {
+        if ([regex]::IsMatch(
+                $Command,
+                $pattern,
+                [Text.RegularExpressions.RegexOptions]::IgnoreCase
+            )) {
+            return [regex]::Replace(
+                $Command,
+                $pattern,
+                '-f null NUL',
+                [Text.RegularExpressions.RegexOptions]::IgnoreCase
+            )
+        }
+    }
+
+    if ([regex]::IsMatch($Command, '"[^"]+"\s*$')) {
+        return [regex]::Replace($Command, '"[^"]+"\s*$', '-f null NUL')
+    }
+
+    throw "Could not replace final output path for dry run."
+}
+
+function Test-OptionEnabled([string]$Value) {
+    $text = ([string]$Value).Trim().ToLowerInvariant()
+    return $text -eq "on" -or
+        $text -eq "true" -or
+        $text -eq "1" -or
+        $text -eq "yes"
+}
+
+function Write-DryRunBatch([string]$BatchPath, [string]$WorkingDirectory, [string]$Command) {
+    $batchContent = @(
+        "@echo off",
+        "cd /d `"$WorkingDirectory`"",
+        $Command,
+        "echo.",
+        "echo Exit code: %ERRORLEVEL%",
+        "pause"
+    ) -join "`r`n"
+
+    $batchContent |
+    Out-File -Encoding ASCII -LiteralPath $BatchPath
+}
+
 function Exit-WithError([string]$Message) {
     Write-Error $Message
     Add-ProcessorOutput "s_job_error_msg" $Message
@@ -291,10 +354,20 @@ $s_FramerateMode = (Get-InputValue "Framerate").Trim()
 $s_FramerateCustom = (Get-InputValue "FramerateCustom").Trim()
 $s_TCStart = (Get-InputValue "TCStart").Trim()
 $s_TCSourceFallback = (Get-InputValue "TCSourceFallback").Trim()
+$s_DryRunMode = (Get-InputValue "DryRunMode").Trim()
+$s_DryRunSaveBatch = (Get-InputValue "DryRunSaveBatch").Trim()
 $s_SuccessMessage = (Get-InputValue "successmsg").Trim()
 
 if ([string]::IsNullOrWhiteSpace($s_TCSourceFallback)) {
     $s_TCSourceFallback = "zero"
+}
+
+if ([string]::IsNullOrWhiteSpace($s_DryRunMode)) {
+    $s_DryRunMode = "off"
+}
+
+if ([string]::IsNullOrWhiteSpace($s_DryRunSaveBatch)) {
+    $s_DryRunSaveBatch = "off"
 }
 
 if ([string]::IsNullOrWhiteSpace($s_FFmpegPath)) {
@@ -419,6 +492,15 @@ if ($s_GeneratedCommand -like "*__SOURCE_FPS__*") {
     Write-Output "Source FPS for timecode: $sourceFpsText"
 }
 
+if ($s_GeneratedCommand -like "*__RUNTIME_ISO_DATE__*") {
+    $runtimeIsoDate = (Get-Date).ToUniversalTime().ToString(
+        "yyyy-MM-ddTHH:mm:ssZ",
+        [Globalization.CultureInfo]::InvariantCulture
+    )
+    $s_GeneratedCommand = $s_GeneratedCommand.Replace("__RUNTIME_ISO_DATE__", $runtimeIsoDate)
+    Write-Output "Runtime metadata date: $runtimeIsoDate"
+}
+
 $outputFps = $sourceFps
 
 if ($s_FramerateMode -eq "custom") {
@@ -461,12 +543,51 @@ if (-not $commandMatch.Success) {
 }
 
 Add-ProcessorOutput "s_ffmpeg_command" $s_GeneratedCommand
+
+$executionCommand = $s_GeneratedCommand
+$dryRunCommandAlreadySet = $s_GeneratedCommand -match '(?i)(^|\s)-f\s+null\s+NUL\s*$'
+$dryRunEnabled = (Test-OptionEnabled $s_DryRunMode) -or $dryRunCommandAlreadySet
+$dryRunBatchEnabled = Test-OptionEnabled $s_DryRunSaveBatch
+$dryRunCommand = ""
+
+Write-Output "Dry-run option: $s_DryRunMode | Save dry-run batch: $s_DryRunSaveBatch"
+
+if ($dryRunEnabled -or $dryRunBatchEnabled) {
+    try {
+        $dryRunCommand = Convert-ToDryRunCommand $s_GeneratedCommand $s_OutputFilePath
+    }
+    catch {
+        Exit-WithError "Could not build dry-run command: $($_.Exception.Message)"
+    }
+
+    Add-ProcessorOutput "s_dryrun_command" $dryRunCommand
+}
+
+if ($dryRunBatchEnabled) {
+    $dryRunBatchPath = [IO.Path]::ChangeExtension($s_OutputFilePath, ".cmd")
+
+    try {
+        Write-DryRunBatch $dryRunBatchPath $ffmpegDir $dryRunCommand
+    }
+    catch {
+        Exit-WithError "Could not write dry-run batch file: $($_.Exception.Message)"
+    }
+
+    Add-ProcessorOutput "s_dryrun_batch" $dryRunBatchPath
+    Write-Output "Dry-run batch file: $dryRunBatchPath"
+}
+
+if ($dryRunEnabled) {
+    $executionCommand = $dryRunCommand
+    Write-Output "Dry run is enabled. FFmpeg will write to NUL instead of creating the final output file."
+}
+
 Write-ProcessorJson
 Write-Output "Resolved FFmpeg command was written to processor outputs."
 
 $progressPrefix = 'ffmpeg -hide_banner -loglevel error -nostdin -nostats -stats_period 1.7 -progress pipe:1'
 $progressCommand = [regex]::Replace(
-    $s_GeneratedCommand,
+    $executionCommand,
     '(^|\s&&\s)"?ffmpeg(?:\.exe)?"?',
     '${1}' + $progressPrefix,
     [Text.RegularExpressions.RegexOptions]::IgnoreCase
@@ -622,6 +743,33 @@ if ($ffmpegExitCode -ne 0) {
     Exit-WithError (
         "FFmpeg failed with exit code $ffmpegExitCode. $errorDetail"
     )
+}
+
+if ($dryRunEnabled) {
+    if ($lastPercent -lt 100) { Write-Output "100%" }
+
+    $dryRunSource = $s_SourceFilePath
+
+    if ($dryRunBatchEnabled) {
+        if (-not (Test-Path -LiteralPath $dryRunBatchPath -PathType Leaf)) {
+            Exit-WithError "Dry-run completed, but batch file was not found: $dryRunBatchPath"
+        }
+
+        $dryRunSource = (Resolve-Path -LiteralPath $dryRunBatchPath).Path
+    }
+
+    Add-ProcessorOutput "s_source" $dryRunSource
+    if ([string]::IsNullOrWhiteSpace($s_SuccessMessage)) {
+        $s_SuccessMessage = "Advanced-FFmpeg dry run completed successfully. Dry run was enabled, so no output file was produced."
+    }
+    else {
+        $s_SuccessMessage = "Advanced-FFmpeg dry run completed successfully. Dry run was enabled, so no output file was produced. $s_SuccessMessage"
+    }
+    Add-ProcessorOutput "s_success" $s_SuccessMessage
+    Write-ProcessorJson
+
+    Write-Output "Dry run done"
+    exit 0
 }
 
 if (-not (Test-Path -LiteralPath $s_OutputFilePath -PathType Leaf)) {
