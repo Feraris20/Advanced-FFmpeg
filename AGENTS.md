@@ -16,7 +16,7 @@ The UI targets FFAStrans' embedded IE11 environment. Keep JavaScript and CSS IE1
 Local FFmpeg path provided by the user:
 
 ```text
-G:\FFAStrans1.4.1\Processors\ffmpeg\x64\ffmpeg.exe
+C:\FFAStrans1.4.1\Processors\ffmpeg\x64\ffmpeg.exe
 ```
 
 Use the sibling `ffprobe.exe` from the same folder for local probing/tests.

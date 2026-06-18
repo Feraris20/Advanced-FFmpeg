@@ -91,13 +91,14 @@
 
         function getPresetFieldIds() {
             return [
-                "FFmpegMode", "FFmpegPath", "Format", "VideoCodec", "RateControl",
+                "FFmpegMode", "FFmpegPath", "Format", "VideoCodec", "VideoLanguage", "RateControl",
                 "VideoBitrate", "CRF", "Preset", "Profile", "Level", "Tune",
                 "Framerate", "FramerateCustom", "Scale", "ScaleWidth", "ScaleHeight",
                 "WatermarkEnable", "WatermarkPath", "WatermarkPosition", "WatermarkXOffset", "WatermarkYOffset",
                 "WatermarkResize", "WatermarkOpacity",
                 "ColorMode", "FramePacking", "OpenGOP", "KeyframeInt", "MinGOP", "DisplayMode",
                 "AudioCodec", "AudioTrackName", "AudioDelay", "AudioLanguage", "AudioBitrate", "AudioChannels", "AudioSampleRate",
+                "EncodedDate", "TaggedDate",
                 "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
                 "TCEnable", "TCStart", "TCUseSource", "TCSourceFallback", "TCFPS", "TCFont", "TCFontCustom", "TCPosition", "TCSize", "TCSizeCustom",
                 "TCBackgroundOpacity", "TCForegroundOpacity"
@@ -690,6 +691,7 @@
 
                 var format = getVal("Format");
                 var vCodec = getVal("VideoCodec");
+                var vLang = getVal("VideoLanguage");
                 var rcMode = getVal("RateControl") || "crf";
                 var vBitrate = getVal("VideoBitrate");
                 var crf = getVal("CRF");
@@ -746,6 +748,8 @@
                 var aBitrate = getVal("AudioBitrate");
                 var aChannels = getVal("AudioChannels");
                 var aSampleRate = getVal("AudioSampleRate");
+                var encodedDate = getVal("EncodedDate");
+                var taggedDate = getVal("TaggedDate");
 
                 var hwAccel = getVal("HWAccel");
                 var threads = getVal("Threads");
@@ -848,6 +852,7 @@
 
                 if (hwAccel !== "") cmd += " -hwaccel " + hwAccel;
                 cmd += " -i \"%s_source%\"";
+                cmd += " -map_metadata -1 -map_chapters -1";
 
                 if (watermarkEnabled && watermarkPath !== "" && watermarkPathIsValid && vCodec !== "copy" && vCodec !== "none") {
                     cmd += ' -i "' + watermarkPath.replace(/"/g, '\\"') + '"';
@@ -959,6 +964,11 @@
                 // --- ADVANCED ---
                 if (threadsIsValid && threads !== "" && threads !== "0") cmd += " -threads " + threads;
                 if (forceCfr === "on") cmd += " -vsync cfr"; // standard way to force constant framerate in ffmpeg
+                if (vCodec !== "none" && vLang !== "" && vLang !== "none") finalOutputOptions += ' -metadata:s:v:0 language=' + vLang;
+                if (vCodec !== "none") finalOutputOptions += ' -metadata:s:v:0 encoder="Advanced-FFmpeg"';
+                if (aCodec !== "none") finalOutputOptions += ' -metadata:s:a:0 encoder="Advanced-FFmpeg"';
+                if (encodedDate !== "") finalOutputOptions += ' -metadata creation_time="' + encodedDate.replace(/"/g, '\\"') + '"';
+                if (taggedDate !== "") finalOutputOptions += ' -metadata tagged_date="' + taggedDate.replace(/"/g, '\\"') + '"';
                 if ((format === "mp4" || format === "mov") && faststart === "on") finalOutputOptions += " -movflags +faststart";
                 if (format === "mp4" && brand !== "" && brand !== "default") finalOutputOptions += " -brand " + brand;
                 if (format === "mp4" && codecId !== "" && codecId !== "default") finalOutputOptions += " -tag:v " + codecId;
@@ -1259,7 +1269,8 @@
                 return;
             }
 
-            var enabled = codecUsesGenericRateControl(codecEl.value);
+            var codec = codecEl.value;
+            var enabled = codecUsesGenericRateControl(codec);
             rateControlEl.disabled = !enabled;
 
             if (!enabled) {
@@ -1267,7 +1278,9 @@
                 if (crfBox) crfBox.style.display = "none";
             }
 
-            setVideoControlsVisible(codecEl.value !== "none");
+            setVideoControlsVisible(codec !== "none");
+            setInlineControlVisible("RateControl", codec !== "none" && codec !== "prores_ks");
+            setInlineControlVisible("Preset", codec !== "none" && codec !== "prores_ks");
         }
 
         function updateCodecIdOptions() {
@@ -1390,6 +1403,36 @@
                     { value: "ac3", text: "AC-3" },
                     { value: "eac3", text: "E-AC-3" },
                     { value: "copy", text: "Copy (Source codec must be MOV-compatible)" },
+                    { value: "none", text: "No Audio" }
+                ];
+            } else if (format === "ts") {
+                codecs = [
+                    { value: "aac", text: "AAC" },
+                    { value: "libfdk_aac", text: "AAC (libfdk_aac external FFmpeg)" },
+                    { value: "libmp3lame", text: "MP3" },
+                    { value: "ac3", text: "AC-3" },
+                    { value: "eac3", text: "E-AC-3" },
+                    { value: "copy", text: "Copy (Source codec must be TS-compatible)" },
+                    { value: "none", text: "No Audio" }
+                ];
+            } else if (format === "mkv") {
+                codecs = [
+                    { value: "aac", text: "AAC" },
+                    { value: "libfdk_aac", text: "AAC (libfdk_aac external FFmpeg)" },
+                    { value: "libmp3lame", text: "MP3" },
+                    { value: "ac3", text: "AC-3" },
+                    { value: "eac3", text: "E-AC-3" },
+                    { value: "alac", text: "ALAC" },
+                    { value: "pcm_s16le", text: "PCM 16-bit" },
+                    { value: "pcm_s24le", text: "PCM 24-bit" },
+                    { value: "copy", text: "Copy (Source codec must be MKV-compatible)" },
+                    { value: "none", text: "No Audio" }
+                ];
+            } else if (format === "webm") {
+                codecs = [
+                    { value: "libopus", text: "Opus" },
+                    { value: "libvorbis", text: "Vorbis" },
+                    { value: "copy", text: "Copy (Source codec must be WebM-compatible)" },
                     { value: "none", text: "No Audio" }
                 ];
             } else {
@@ -1529,12 +1572,71 @@
                 for (var i = 0; i < mp4Codecs.length; i++) {
                     addOption(codecSelect, mp4Codecs[i].value, mp4Codecs[i].text);
                 }
+            } else if (format === "ts") {
+                var tsCodecs = [
+                    { value: "libx264", text: "MPEG-4 AVC / H.264" },
+                    { value: "libx265", text: "HEVC / H.265" },
+                    { value: "mpeg2video", text: "MPEG-2" },
+                    { value: "mpeg1video", text: "MPEG-1" },
+                    { value: "copy", text: "Copy (Source codec must be TS-compatible)" },
+                    { value: "none", text: "No Video" }
+                ];
+
+                for (var tsIndex = 0; tsIndex < tsCodecs.length; tsIndex++) {
+                    addOption(codecSelect, tsCodecs[tsIndex].value, tsCodecs[tsIndex].text);
+                }
+            } else if (format === "mkv") {
+                var mkvCodecs = [
+                    { value: "libx264", text: "MPEG-4 AVC / H.264" },
+                    { value: "libx264rgb", text: "MPEG-4 AVC / H.264 RGB" },
+                    { value: "h264_amf", text: "MPEG-4 AVC / H.264 (AMD AMF)" },
+                    { value: "h264_nvenc", text: "MPEG-4 AVC / H.264 (Nvidia NVENC)" },
+                    { value: "h264_qsv", text: "MPEG-4 AVC / H.264 (Intel Quick Sync)" },
+                    { value: "libx265", text: "HEVC / H.265" },
+                    { value: "hevc_amf", text: "HEVC / H.265 (AMD AMF)" },
+                    { value: "hevc_d3d12va", text: "HEVC / H.265 (Direct3D 12)" },
+                    { value: "hevc_nvenc", text: "HEVC / H.265 (Nvidia NVENC)" },
+                    { value: "hevc_qsv", text: "HEVC / H.265 (Intel Quick Sync)" },
+                    { value: "libaom-av1", text: "AV1 (libaom)" },
+                    { value: "librav1e", text: "AV1 (rav1e)" },
+                    { value: "libsvtav1", text: "AV1 (SVT-AV1)" },
+                    { value: "av1_amf", text: "AV1 (AMD AMF)" },
+                    { value: "av1_nvenc", text: "AV1 (Nvidia NVENC)" },
+                    { value: "av1_qsv", text: "AV1 (Intel Quick Sync)" },
+                    { value: "prores_ks", text: "Apple ProRes" },
+                    { value: "mpeg4", text: "MPEG-4 Part 2" },
+                    { value: "libxvid", text: "XviD / MPEG-4 Part 2" },
+                    { value: "libvpx-vp9", text: "VP9" },
+                    { value: "vp9_qsv", text: "VP9 (Intel Quick Sync)" },
+                    { value: "mjpeg", text: "Motion JPEG" },
+                    { value: "mjpeg_qsv", text: "Motion JPEG (Intel Quick Sync)" },
+                    { value: "mpeg1video", text: "MPEG-1" },
+                    { value: "mpeg2video", text: "MPEG-2" },
+                    { value: "mpeg2_qsv", text: "MPEG-2 (Intel Quick Sync)" },
+                    { value: "copy", text: "Copy (Source codec must be MKV-compatible)" },
+                    { value: "none", text: "No Video" }
+                ];
+
+                for (var mkvIndex = 0; mkvIndex < mkvCodecs.length; mkvIndex++) {
+                    addOption(codecSelect, mkvCodecs[mkvIndex].value, mkvCodecs[mkvIndex].text);
+                }
+            } else if (format === "webm") {
+                var webmCodecs = [
+                    { value: "libvpx", text: "VP8 (libvpx)" },
+                    { value: "libvpx-vp9", text: "VP9 (libvpx-vp9)" },
+                    { value: "libaom-av1", text: "AV1 (libaom)" },
+                    { value: "copy", text: "Copy (Source codec must be WebM-compatible)" },
+                    { value: "none", text: "No Video" }
+                ];
+
+                for (var webmIndex = 0; webmIndex < webmCodecs.length; webmIndex++) {
+                    addOption(codecSelect, webmCodecs[webmIndex].value, webmCodecs[webmIndex].text);
+                }
             } else {
-                // Fallback options for MKV, MOV, TS, etc.
+                // Fallback options for other containers.
                 var defaultCodecs = [
                     { value: "libx264", text: "MPEG-4 AVC / H.264" },
                     { value: "libx265", text: "HEVC / H.265" },
-                    { value: "prores_ks", text: "Apple ProRes" },
                     { value: "copy", text: "Copy (No Re-encode)" }
                 ];
                 for (var j = 0; j < defaultCodecs.length; j++) {
@@ -2339,7 +2441,7 @@
         var OPTION_HELP_ITEMS = [
             { id: "FFmpegMode", title: "FFmpeg Engine", text: "Choose FFAStrans internal FFmpeg or an external executable. FFmpeg options are applied to the next input or output file, so the selected binary must support the command we build.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Description" },
             { id: "FFmpegPath", title: "FFmpeg Path", text: "External FFmpeg can be a path to ffmpeg.exe, a folder, or an FFAStrans variable that expands before execution. ffprobe.exe is expected beside ffmpeg.exe.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Synopsis" },
-            { id: "Format", title: "Container Format", text: "The container muxer controls how encoded streams are written. MP4 and MOV rebuild codec choices to keep the command container-aware.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
+            { id: "Format", title: "Container Format", text: "The container muxer controls how encoded streams are written. MP4, MOV, TS, MKV, and WebM rebuild codec choices to keep the command container-aware.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
             { id: "VideoCodec", title: "Video Codec", text: "Sets the video encoder with -c:v. Copy mode stream-copies packets without decoding. No Video writes -vn and creates an audio-only file when the container and source audio allow it.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
             { id: "RateControl", title: "Rate Control", text: "Controls bitrate or quality strategy. ABR uses -b:v, 2-pass uses -pass, CRF uses quality-based encoding, and QP/CQ uses encoder quantizer control.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
             { id: "VideoBitrate", title: "Video Bitrate", text: "Sets the target video bitrate with -b:v. This is most useful with ABR and 2-pass ABR modes.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
@@ -2382,6 +2484,9 @@
             { id: "AudioTrackName", title: "Track Name", text: "Writes stream title metadata for the first audio stream.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "AudioDelay", title: "Audio Delay", text: "For encoded audio, uses the adelay filter to delay samples by milliseconds.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#adelay" },
             { id: "AudioLanguage", title: "Language", text: "Writes stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "VideoLanguage", title: "Video Language", text: "Writes the video stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "EncodedDate", title: "Encoded Date", text: "Writes the output file's encoded date metadata when provided.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "TaggedDate", title: "Tagged Date", text: "Writes the output file's tagged date metadata when provided.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "Threads", title: "Threads", text: "Sets FFmpeg thread count when supported. Leaving it empty or zero lets FFmpeg decide.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
             { id: "HWAccel", title: "Hardware Acceleration", text: "Adds -hwaccel for supported decoding acceleration. Actual support depends on the local FFmpeg build and hardware.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
             { id: "OpenGOP", title: "Open GOP", text: "Encoder private setting for supported x264/x265 encoders. Default emits no option.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
@@ -2735,9 +2840,10 @@
 
         <select class="ffas-text-input" id="Format" onchange="updateCodecs()">
             <option value="mp4" selected>MP4 (.mp4)</option>
-            <option value="mkv" disabled="disabled">Matroska (.mkv) - coming later</option>
+            <option value="mkv">Matroska (.mkv)</option>
             <option value="mov">QuickTime (.mov)</option>
-            <option value="ts" disabled="disabled">MPEG-TS (.ts) - coming later</option>
+            <option value="ts">MPEG-TS (.ts)</option>
+            <option value="webm">WebM (.webm)</option>
         </select>
     </div>
 
@@ -2755,6 +2861,196 @@
                     <option value="libx265">HEVC / H.265</option>
                     <option value="prores_ks">Apple ProRes</option>
                     <option value="copy">Copy (No Re-encode)</option>
+                </select><br />
+
+                <label class="ffas-label-left">Video Language: </label>
+                <select class="ffas-text-input" id="VideoLanguage" onchange="updateCommand()">
+                    <option value="none" selected>none</option>
+                    <option value="aar">Afar</option>
+                    <option value="abk">Abkhazian</option>
+                    <option value="afr">Afrikaans</option>
+                    <option value="aka">Akan</option>
+                    <option value="alb">Albanian</option>
+                    <option value="amh">Amharic</option>
+                    <option value="ara">Arabic</option>
+                    <option value="arg">Aragonese</option>
+                    <option value="arm">Armenian</option>
+                    <option value="asm">Assamese</option>
+                    <option value="ava">Avaric</option>
+                    <option value="ave">Avestan</option>
+                    <option value="aym">Aymara</option>
+                    <option value="aze">Azerbaijani</option>
+                    <option value="bak">Bashkir</option>
+                    <option value="bam">Bambara</option>
+                    <option value="baq">Basque</option>
+                    <option value="bel">Belarusian</option>
+                    <option value="ben">Bengali</option>
+                    <option value="bih">Bihari</option>
+                    <option value="bis">Bislama</option>
+                    <option value="bos">Bosnian</option>
+                    <option value="bre">Breton</option>
+                    <option value="bul">Bulgarian</option>
+                    <option value="bur">Burmese</option>
+                    <option value="cat">Catalan</option>
+                    <option value="cha">Chamorro</option>
+                    <option value="che">Chechen</option>
+                    <option value="chi">Chinese</option>
+                    <option value="chu">Church Slavic</option>
+                    <option value="chv">Chuvash</option>
+                    <option value="cor">Cornish</option>
+                    <option value="cos">Corsican</option>
+                    <option value="cre">Cree</option>
+                    <option value="cze">Czech</option>
+                    <option value="dan">Danish</option>
+                    <option value="div">Divehi</option>
+                    <option value="dut">Dutch</option>
+                    <option value="eng">English</option>
+                    <option value="epo">Esperanto</option>
+                    <option value="est">Estonian</option>
+                    <option value="ewe">Ewe</option>
+                    <option value="fao">Faroese</option>
+                    <option value="fij">Fijian</option>
+                    <option value="fin">Finnish</option>
+                    <option value="fre">French</option>
+                    <option value="fry">Western Frisian</option>
+                    <option value="ful">Fulah</option>
+                    <option value="geo">Georgian</option>
+                    <option value="ger">German</option>
+                    <option value="gla">Gaelic</option>
+                    <option value="gle">Irish</option>
+                    <option value="glg">Galician</option>
+                    <option value="glv">Manx</option>
+                    <option value="gre">Greek</option>
+                    <option value="grn">Guarani</option>
+                    <option value="guj">Gujarati</option>
+                    <option value="hat">Haitian</option>
+                    <option value="hau">Hausa</option>
+                    <option value="heb">Hebrew</option>
+                    <option value="her">Herero</option>
+                    <option value="hin">Hindi</option>
+                    <option value="hmo">Hiri Motu</option>
+                    <option value="hrv">Croatian</option>
+                    <option value="hun">Hungarian</option>
+                    <option value="ibo">Igbo</option>
+                    <option value="ice">Icelandic</option>
+                    <option value="ido">Ido</option>
+                    <option value="iii">Sichuan Yi</option>
+                    <option value="iku">Inuktitut</option>
+                    <option value="ile">Interlingue</option>
+                    <option value="ina">Interlingua</option>
+                    <option value="ind">Indonesian</option>
+                    <option value="ipk">Inupiaq</option>
+                    <option value="ita">Italian</option>
+                    <option value="jav">Javanese</option>
+                    <option value="jpn">Japanese</option>
+                    <option value="kal">Kalaallisut</option>
+                    <option value="kan">Kannada</option>
+                    <option value="kas">Kashmiri</option>
+                    <option value="kau">Kanuri</option>
+                    <option value="kaz">Kazakh</option>
+                    <option value="khm">Khmer</option>
+                    <option value="kik">Kikuyu</option>
+                    <option value="kin">Kinyarwanda</option>
+                    <option value="kir">Kirghiz</option>
+                    <option value="kom">Komi</option>
+                    <option value="kon">Kongo</option>
+                    <option value="kor">Korean</option>
+                    <option value="kua">Kuanyama</option>
+                    <option value="kur">Kurdish</option>
+                    <option value="lao">Lao</option>
+                    <option value="lat">Latin</option>
+                    <option value="lav">Latvian</option>
+                    <option value="lim">Limburgan</option>
+                    <option value="lin">Lingala</option>
+                    <option value="lit">Lithuanian</option>
+                    <option value="ltz">Luxembourgish</option>
+                    <option value="lub">Luba-Katanga</option>
+                    <option value="lug">Ganda</option>
+                    <option value="mac">Macedonian</option>
+                    <option value="mah">Marshallese</option>
+                    <option value="mal">Malayalam</option>
+                    <option value="mao">Maori</option>
+                    <option value="mar">Marathi</option>
+                    <option value="may">Malay</option>
+                    <option value="mlg">Malagasy</option>
+                    <option value="mlt">Maltese</option>
+                    <option value="mon">Mongolian</option>
+                    <option value="nau">Nauru</option>
+                    <option value="nav">Navajo</option>
+                    <option value="nbl">Ndebele, South</option>
+                    <option value="nde">Ndebele, North</option>
+                    <option value="ndo">Ndonga</option>
+                    <option value="nep">Nepali</option>
+                    <option value="nno">Norwegian Nynorsk</option>
+                    <option value="nob">Norwegian Bokmal</option>
+                    <option value="nor">Norwegian</option>
+                    <option value="nya">Chichewa</option>
+                    <option value="oci">Occitan</option>
+                    <option value="oji">Ojibwa</option>
+                    <option value="ori">Oriya</option>
+                    <option value="orm">Oromo</option>
+                    <option value="oss">Ossetian</option>
+                    <option value="pan">Panjabi</option>
+                    <option value="per">Persian</option>
+                    <option value="pli">Pali</option>
+                    <option value="pol">Polish</option>
+                    <option value="por">Portuguese</option>
+                    <option value="pus">Pushto</option>
+                    <option value="que">Quechua</option>
+                    <option value="roh">Raeto-Romance</option>
+                    <option value="ron">Romanian</option>
+                    <option value="run">Rundi</option>
+                    <option value="rus">Russian</option>
+                    <option value="sag">Sango</option>
+                    <option value="san">Sanskrit</option>
+                    <option value="sin">Sinhala</option>
+                    <option value="sla">Slavic</option>
+                    <option value="slo">Slovak</option>
+                    <option value="slv">Slovenian</option>
+                    <option value="sme">Northern Sami</option>
+                    <option value="smo">Samoan</option>
+                    <option value="sna">Shona</option>
+                    <option value="snd">Sindhi</option>
+                    <option value="som">Somali</option>
+                    <option value="sot">Sotho, Southern</option>
+                    <option value="spa">Spanish</option>
+                    <option value="srd">Sardinian</option>
+                    <option value="srp">Serbian</option>
+                    <option value="ssw">Swazi</option>
+                    <option value="sun">Sundanese</option>
+                    <option value="swa">Swahili</option>
+                    <option value="swe">Swedish</option>
+                    <option value="tah">Tahitian</option>
+                    <option value="tam">Tamil</option>
+                    <option value="tat">Tatar</option>
+                    <option value="tel">Telugu</option>
+                    <option value="tgk">Tajik</option>
+                    <option value="tgl">Tagalog</option>
+                    <option value="tha">Thai</option>
+                    <option value="tib">Tibetan</option>
+                    <option value="tir">Tigrinya</option>
+                    <option value="ton">Tonga</option>
+                    <option value="tsn">Tswana</option>
+                    <option value="tso">Tsonga</option>
+                    <option value="tur">Turkish</option>
+                    <option value="tuk">Turkmen</option>
+                    <option value="twi">Twi</option>
+                    <option value="uig">Uighur</option>
+                    <option value="ukr">Ukrainian</option>
+                    <option value="urd">Urdu</option>
+                    <option value="uzb">Uzbek</option>
+                    <option value="ven">Venda</option>
+                    <option value="vie">Vietnamese</option>
+                    <option value="vol">Volapük</option>
+                    <option value="wel">Welsh</option>
+                    <option value="wln">Walloon</option>
+                    <option value="wol">Wolof</option>
+                    <option value="xho">Xhosa</option>
+                    <option value="yid">Yiddish</option>
+                    <option value="yor">Yoruba</option>
+                    <option value="zha">Chinese, Yue</option>
+                    <option value="zho">Chinese</option>
+                    <option value="zul">Zulu</option>
                 </select><br />
 
                 <label class="ffas-label-left">Rate Control: </label>
@@ -3479,6 +3775,18 @@
             <option value="default" selected>Default</option>
             <option value="on">On</option>
         </select><br />
+
+        <label class="ffas-label-left">Encoded Date: </label>
+        <input type="text" class="ffas-text-input" id="EncodedDate" onkeyup="updateCommand()"
+            onchange="updateCommand()" placeholder="YYYY-MM-DDTHH:MM:SSZ or %s_var%" />
+        <input width="2px" type="submit" value="<" name="open_vars" data-parent="EncodedDate"
+            data-user_vars_only="true" id="EncodedDateVarsBtn" /><br />
+
+        <label class="ffas-label-left">Tagged Date: </label>
+        <input type="text" class="ffas-text-input" id="TaggedDate" onkeyup="updateCommand()"
+            onchange="updateCommand()" placeholder="YYYY-MM-DDTHH:MM:SSZ or %s_var%" />
+        <input width="2px" type="submit" value="<" name="open_vars" data-parent="TaggedDate"
+            data-user_vars_only="true" id="TaggedDateVarsBtn" /><br />
 
         <label class="ffas-label-left">Extra Arguments: </label>
         <input type="text" class="ffas-text-input" id="ExtraArgs" onkeyup="updateCommand()" onchange="updateCommand()"

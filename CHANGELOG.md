@@ -2,6 +2,38 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.24 - 2026-06-18
+
+- Added a WebM container option and matching audio/video codec lists.
+- Disabled copying source metadata/chapters so outputs start clean and avoid inherited tag noise.
+
+## 0.0.23 - 2026-06-18
+
+- Removed application/software tagging output.
+- Corrected the encoded date metadata flag to use `creation_time` and kept the tagged date handling separate.
+
+## 0.0.22 - 2026-06-18
+
+- Added video language, encoded date, and tagged date controls.
+- Switched the software/application metadata handling to use the correct FFmpeg metadata keys.
+
+## 0.0.21 - 2026-06-18
+
+- Enabled Matroska (.mkv) output and added container-aware video/audio codec lists.
+- Added encoder metadata tagging so output streams advertise Advanced-FFmpeg.
+
+## 0.0.20 - 2026-06-18
+
+- Made MPEG-TS use container-specific video and audio codec lists so only appropriate options remain available.
+
+## 0.0.19 - 2026-06-18
+
+- Enabled the MPEG-TS container option in the UI so the TS format can now be selected.
+
+## 0.0.18 - 2026-06-18
+
+- Hid Rate Control and Encoding Preset when Apple ProRes is selected so only relevant ProRes controls remain visible.
+
 ## 0.0.17 - 2026-06-18
 
 - Applied saved themes before revealing the UI to avoid the original-theme flash.

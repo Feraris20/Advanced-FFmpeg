@@ -1,5 +1,5 @@
 {
-    "name":  "Adanced-FFmpeg",
+    "name":  "Advanced-FFmpeg",
     "category":  "Encoders",
     "enabled":  1,
     "priority":  1,
@@ -10,7 +10,7 @@
     "timeout_minutes":  10,
     "gui_window_width":  800,
     "gui_window_height":  600,
-    "version":  "0.0.17"
+    "version":  "0.0.24"
 }
 
 

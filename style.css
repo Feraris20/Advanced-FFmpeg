@@ -308,7 +308,7 @@
             display: inline-block;
             position: relative;
 
-            width: 260px;
+            width: 264px;
             height: 44px;
             padding: 0 10px;
             box-sizing: border-box;
@@ -327,13 +327,13 @@
             top: 1px;
             left: 10px;
 
-            width: 238px;
+            width: 268px;
             height: 24px;
             padding: 0;
         }
 
         .quality-slider {
-            width: 185px;
+            width: 205px;
         }
 
         .quality-slider-labels {
@@ -344,7 +344,7 @@
             left: 10px;
             bottom: 2px;
 
-            width: 235px;
+            width: 265px;
             margin: 0;
 
             font-family: sans-serif;
@@ -389,7 +389,7 @@
             display: inline-block;
 
             width: 38px;
-            margin-left: 10px;
+            margin-left: 12px;
 
             font-family: sans-serif;
             font-size: 16px;
