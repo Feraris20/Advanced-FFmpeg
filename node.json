@@ -1,0 +1,16 @@
+{
+    "name":  "Adanced-FFmpeg",
+    "category":  "Encoders",
+    "enabled":  1,
+    "priority":  1,
+    "description":  "FFmpeg command build.",
+    "guid":  "0714c5f8-b59c-4485-aris-8ccd85ab8362",
+    "script_interpreter":  "powershell.exe -ExecutionPolicy Unrestricted -File ",
+    "proc_script":  "processor.ps1",
+    "timeout_minutes":  10,
+    "gui_window_width":  800,
+    "gui_window_height":  600,
+    "version":  "0.0.17"
+}
+
+

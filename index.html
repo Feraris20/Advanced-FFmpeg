@@ -1,0 +1,3537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=11" />
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            alert("Error: " + msg + "\nline: " + line);
+            return true;
+        };
+
+        function checkIE11() {
+            return !!window.MSInputMethodContext && !!document.documentMode;
+        }
+
+        function syncQualityValue(value) {
+            var slider = document.getElementById("CRF");
+            var numberLabel = document.getElementById("CRFNumber");
+            var description = document.getElementById("QualityDescription");
+
+            var numericValue = parseInt(value, 10);
+
+            if (isNaN(numericValue)) {
+                numericValue = 23;
+            }
+
+            if (numericValue < 0) {
+                numericValue = 0;
+            }
+
+            if (numericValue > 63) {
+                numericValue = 63;
+            }
+
+            slider.value = numericValue;
+            numberLabel.innerHTML = numericValue;
+
+            if (numericValue <= 17) {
+                description.innerHTML = "Very high";
+            } else if (numericValue <= 23) {
+                description.innerHTML = "High";
+            } else if (numericValue <= 30) {
+                description.innerHTML = "Balanced";
+            } else if (numericValue <= 40) {
+                description.innerHTML = "Smaller";
+            } else {
+                description.innerHTML = "Very small";
+            }
+
+            updateCommand();
+        }
+
+        // 2. Main Initialization (Called by FFAStrans)
+        function ffas_init(base64_displayname, base64_node_json_config) {
+            if (!checkIE11()) alert("Only IE11 supported");
+
+            var _nodejson = JSON.parse(atob(base64_node_json_config));
+            var _displayname = atob(base64_displayname);
+
+            var titleEl = document.getElementById("title");
+            if (titleEl) {
+                titleEl.innerHTML = '<span style="font-size: 16px; font-weight: bold;">' + _displayname + ' ' + _nodejson.version + '</span>';
+            }
+
+            // Initialize UI safely
+            toggleFramerateCustom();
+            toggleResolutionCustom();
+            toggleFFmpegMode();
+            updateCodecs();
+            populateTCFonts();
+            toggleTCSizeCustom();
+            toggleTCSourceFallback();
+            toggleWatermarkOptions();
+            toggleAudioOptions();
+            toggleGeneratedCommand();
+            applyTheme();
+            initOptionHelp();
+            sortAudioLanguages();
+            updateCodecIdOptions();
+            captureDefaultValues();
+            updateCommand();
+
+
+
+        }
+
+        var PRESET_SCHEMA_VERSION = 1;
+        var DEFAULT_FIELD_VALUES = null;
+
+        function getPresetFieldIds() {
+            return [
+                "FFmpegMode", "FFmpegPath", "Format", "VideoCodec", "RateControl",
+                "VideoBitrate", "CRF", "Preset", "Profile", "Level", "Tune",
+                "Framerate", "FramerateCustom", "Scale", "ScaleWidth", "ScaleHeight",
+                "WatermarkEnable", "WatermarkPath", "WatermarkPosition", "WatermarkXOffset", "WatermarkYOffset",
+                "WatermarkResize", "WatermarkOpacity",
+                "ColorMode", "FramePacking", "OpenGOP", "KeyframeInt", "MinGOP", "DisplayMode",
+                "AudioCodec", "AudioTrackName", "AudioDelay", "AudioLanguage", "AudioBitrate", "AudioChannels", "AudioSampleRate",
+                "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
+                "TCEnable", "TCStart", "TCUseSource", "TCSourceFallback", "TCFPS", "TCFont", "TCFontCustom", "TCPosition", "TCSize", "TCSizeCustom",
+                "TCBackgroundOpacity", "TCForegroundOpacity"
+            ];
+        }
+
+        function captureDefaultValues(force) {
+            if (DEFAULT_FIELD_VALUES && !force) {
+                return;
+            }
+
+            DEFAULT_FIELD_VALUES = {};
+            var ids = getPresetFieldIds();
+
+            for (var i = 0; i < ids.length; i++) {
+                var el = document.getElementById(ids[i]);
+
+                if (el) {
+                    DEFAULT_FIELD_VALUES[ids[i]] = el.type === "checkbox" ? el.checked : el.value;
+                }
+            }
+        }
+
+        function restoreFieldDefault(id) {
+            if (!DEFAULT_FIELD_VALUES) {
+                captureDefaultValues();
+            }
+
+            var el = document.getElementById(id);
+
+            if (!el || !DEFAULT_FIELD_VALUES || typeof DEFAULT_FIELD_VALUES[id] === "undefined") {
+                return;
+            }
+
+            if (el.type === "checkbox") {
+                el.checked = DEFAULT_FIELD_VALUES[id] === true;
+            } else {
+                el.value = DEFAULT_FIELD_VALUES[id];
+            }
+
+            clearFieldError(el);
+        }
+
+        function getFieldIdsInTab(tabId) {
+            var ids = getPresetFieldIds();
+            var tab = document.getElementById(tabId);
+            var result = [];
+
+            if (!tab) {
+                return result;
+            }
+
+            for (var i = 0; i < ids.length; i++) {
+                var el = document.getElementById(ids[i]);
+
+                if (el) {
+                    var node = el;
+
+                    while (node) {
+                        if (node === tab) {
+                            result.push(ids[i]);
+                            break;
+                        }
+
+                        node = node.parentNode;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        function resetFields(fieldIds) {
+            for (var i = 0; i < fieldIds.length; i++) {
+                restoreFieldDefault(fieldIds[i]);
+            }
+
+            syncLoadedUiState();
+            refreshOptionsTab();
+            return false;
+        }
+
+        function resetTab(tabId) {
+            if (tabId === "TabOptions") {
+                return resetAllSettings();
+            }
+
+            return resetFields(getFieldIdsInTab(tabId));
+        }
+
+        function resetAllSettings() {
+            return resetFields(getPresetFieldIds());
+        }
+
+        function applyPresetObject(obj) {
+            if (!obj || typeof obj !== "object") {
+                alert("Invalid preset JSON.");
+                return false;
+            }
+
+            if (obj.presetSchemaVersion && obj.presetSchemaVersion > PRESET_SCHEMA_VERSION) {
+                alert("This preset was saved with a newer preset version and cannot be loaded safely.");
+                return false;
+            }
+
+            populateTCFonts();
+            applyThemeValue(findPresetInputValue(obj, "Theme"), false);
+            var savedProfile = findPresetInputValue(obj, "Profile");
+
+            if (obj.inputs) {
+                for (var i = 0; i < obj.inputs.length; i++) {
+                    var item = obj.inputs[i];
+                    var el = document.getElementById(item.id);
+
+                    if (el) {
+                        if (el.type === "checkbox") el.checked = (item.value === true || item.value === "true");
+                        else el.value = item.value;
+                    }
+                }
+            }
+
+            syncLoadedUiState();
+            restoreSelectValueIfPresent("Profile", savedProfile);
+            updateCommand();
+            return true;
+        }
+
+        function restoreSelectValueIfPresent(id, value) {
+            if (value === null || typeof value === "undefined") {
+                return;
+            }
+
+            var el = document.getElementById(id);
+
+            if (!el || !el.options) {
+                return;
+            }
+
+            for (var i = 0; i < el.options.length; i++) {
+                if (el.options[i].value === value) {
+                    el.value = value;
+                    return;
+                }
+            }
+        }
+
+        function findPresetInputValue(obj, id) {
+            if (!obj || !obj.inputs) {
+                return null;
+            }
+
+            for (var i = 0; i < obj.inputs.length; i++) {
+                if (obj.inputs[i].id === id) {
+                    return obj.inputs[i].value;
+                }
+            }
+
+            return null;
+        }
+
+        function syncLoadedUiState() {
+            var crfEl = document.getElementById("CRF");
+            if (crfEl) {
+                syncQualityValue(crfEl.value);
+            }
+
+            toggleTimecode();
+
+            var bgOpacity = document.getElementById("TCBackgroundOpacity");
+            var fgOpacity = document.getElementById("TCForegroundOpacity");
+
+            if (bgOpacity) {
+                document.getElementById("TCBackgroundValue").innerHTML =
+                    bgOpacity.value;
+            }
+
+            if (fgOpacity) {
+                document.getElementById("TCForegroundValue").innerHTML =
+                    fgOpacity.value;
+            }
+
+            restoreTCPosition();
+            toggleFramerateCustom();
+            toggleResolutionCustom();
+            toggleFFmpegMode();
+            updateCodecs();
+            updateColorModes();
+            populateTCFonts();
+            toggleTCSizeCustom();
+            toggleTCSourceFallback();
+            toggleWatermarkOptions();
+            toggleAudioOptions();
+            toggleGeneratedCommand();
+            applyTheme();
+            initOptionHelp();
+            sortAudioLanguages();
+            updateCodecIdOptions();
+            initOptionHelp();
+            updateCommand();
+        }
+
+        // 3. Robust Preset Loader
+        function ffas_load_preset(base64_string) {
+            try {
+                captureDefaultValues();
+                var obj = JSON.parse(atob(base64_string));
+                applyPresetObject(obj);
+
+
+
+                // Reveal the body ONLY after everything is ready
+                document.body.style.visibility = "visible";
+
+            } catch (e) { console.error("Load failed", e); }
+        }
+
+        function btoaUTF8(str) {
+            return btoa(unescape(encodeURIComponent(str)));
+        }
+        function ffas_file_selected(what, element_id) {
+            /* when using special input named "open_filebrowser", we must define this function to retrieve the selected value */
+            document.getElementById(atob(element_id)).value = atob(what);
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function ffas_save_preset() {
+            updateCommand();
+
+            var to_save = { "presetSchemaVersion": PRESET_SCHEMA_VERSION, "inputs": [], "outputs": [] };
+            var inputFields = getPresetFieldIds();
+
+            for (var i = 0; i < inputFields.length; i++) {
+                var el = document.getElementById(inputFields[i]);
+
+                if (el) {
+                    to_save.inputs.push({
+                        id: el.id,
+                        value: el.type === "checkbox" ? el.checked : el.value
+                    });
+                }
+            }
+
+            return btoaUTF8(JSON.stringify(to_save));
+        }
+
+        function getPresetJsonString(pretty) {
+            updateCommand();
+
+            var preset = { "presetSchemaVersion": PRESET_SCHEMA_VERSION, "inputs": [], "outputs": [] };
+            var fields = getPresetFieldIds();
+
+            for (var i = 0; i < fields.length; i++) {
+                var el = document.getElementById(fields[i]);
+
+                if (el && shouldExposeInPresetJson(el.id)) {
+                    preset.inputs.push({
+                        id: el.id,
+                        value: getPresetJsonSafeValue(el)
+                    });
+                }
+            }
+
+            return JSON.stringify(preset, null, pretty ? 2 : 0);
+        }
+
+        function shouldExposeInPresetJson(id) {
+            return id !== "GeneratedCommand" &&
+                id !== "SourceFilePath" &&
+                id !== "OutputFilePath";
+        }
+
+        function looksLikeLocalPath(value) {
+            return /[a-z]:\\/i.test(value) || /\\\\/.test(value);
+        }
+
+        function getPresetJsonSafeValue(el) {
+            var value = el.type === "checkbox" ? el.checked : el.value;
+
+            if (value === true || value === false) {
+                return value;
+            }
+
+            if (typeof value !== "string") {
+                return value;
+            }
+
+            if (looksLikeLocalPath(value)) {
+                return "";
+            }
+
+            return value;
+        }
+
+        function exportPresetJson() {
+            var box = document.getElementById("PresetJson");
+            var json = getPresetJsonString(true);
+
+            if (box) {
+                box.value = json;
+            }
+
+            if (window.navigator && window.navigator.msSaveBlob) {
+                window.navigator.msSaveBlob(
+                    new Blob([json], { type: "application/json" }),
+                    "advanced-ffmpeg-preset.json"
+                );
+            } else {
+                var link = document.createElement("a");
+                link.href = "data:application/json;charset=utf-8," + encodeURIComponent(json);
+                link.download = "advanced-ffmpeg-preset.json";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            return false;
+        }
+
+        function importPresetJson() {
+            var fileInput = document.getElementById("PresetFileInput");
+
+            if (fileInput) {
+                fileInput.value = "";
+                fileInput.click();
+            }
+
+            return false;
+        }
+
+        function importPresetJsonFromFile(input) {
+            if (!input || !input.files || input.files.length === 0) {
+                return false;
+            }
+
+            var file = input.files[0];
+            var reader = new FileReader();
+
+            reader.onload = function (event) {
+                try {
+                    var json = event.target.result;
+                    var box = document.getElementById("PresetJson");
+
+                    if (box) {
+                        box.value = json;
+                    }
+
+                    applyPresetObject(JSON.parse(json));
+                } catch (e) {
+                    alert("Invalid preset JSON file.");
+                }
+            };
+
+            reader.readAsText(file);
+            return false;
+        }
+
+        function importPresetJsonFromText() {
+            var box = document.getElementById("PresetJson");
+
+            if (!box || box.value.trim() === "") {
+                alert("Paste preset JSON first.");
+                return false;
+            }
+
+            try {
+                var obj = JSON.parse(box.value);
+                applyPresetObject(obj);
+            } catch (e) {
+                alert("Invalid preset JSON.");
+            }
+
+            return false;
+        }
+
+        function openTab(tabName, btnId) {
+            var i;
+            var tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) tabcontent[i].style.display = "none";
+            var tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) tablinks[i].className = tablinks[i].className.replace(" active", "");
+            document.getElementById(tabName).style.display = "block";
+            document.getElementById(btnId).className += " active";
+
+            if (tabName === "TabOptions") {
+                refreshOptionsTab();
+            }
+        }
+
+        function refreshOptionsTab() {
+            var box = document.getElementById("PresetJson");
+
+            if (box) {
+                box.value = getPresetJsonString(true);
+            }
+        }
+
+        function toggleGeneratedCommand() {
+            var selectEl = document.getElementById("CommandVisibility");
+            var panel = document.getElementById("GeneratedCommandPanel");
+
+            if (panel) {
+                panel.style.display = selectEl && selectEl.value === "shown" ? "block" : "none";
+            }
+
+            updateCommand();
+        }
+
+        function applyTheme() {
+            var selectEl = document.getElementById("Theme");
+            applyThemeValue(selectEl ? selectEl.value : "original", true);
+        }
+
+        function normalizeTheme(theme) {
+            var allowed = {
+                original: true,
+                video: true,
+                ffmpeg: true,
+                monitoring: true,
+                dark: true,
+                contrast: true
+            };
+
+            return allowed[theme] ? theme : "original";
+        }
+
+        function applyThemeValue(theme, updateAfter) {
+            var selectEl = document.getElementById("Theme");
+            var body = document.body;
+
+            if (!body) {
+                return;
+            }
+
+            theme = normalizeTheme(theme || (selectEl ? selectEl.value : "original"));
+
+            if (selectEl) {
+                selectEl.value = theme;
+            }
+
+            body.className = body.className
+                .replace(/\s*theme-original/g, "")
+                .replace(/\s*theme-monitoring/g, "")
+                .replace(/\s*theme-video/g, "")
+                .replace(/\s*theme-ffmpeg/g, "")
+                .replace(/\s*theme-dark/g, "")
+                .replace(/\s*theme-contrast/g, "");
+
+            body.className += " theme-" + theme;
+
+            if (updateAfter !== false) {
+                updateCommand();
+            }
+        }
+
+        function toggleWatermarkOptions() {
+            var enabled = document.getElementById("WatermarkEnable");
+            var settings = document.getElementById("WatermarkSettings");
+            var notice = document.getElementById("WatermarkCopyNotice");
+            var codec = document.getElementById("VideoCodec");
+            var canUseWatermark = !codec || (codec.value !== "copy" && codec.value !== "none");
+
+            if (settings) {
+                settings.style.display = enabled && enabled.checked && canUseWatermark ? "block" : "none";
+            }
+
+            if (notice) {
+                notice.style.display = enabled && enabled.checked && !canUseWatermark ? "block" : "none";
+            }
+
+            syncWatermarkOpacity();
+            restoreWatermarkPosition();
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function syncWatermarkOpacity() {
+            var slider = document.getElementById("WatermarkOpacity");
+            var label = document.getElementById("WatermarkOpacityValue");
+
+            if (slider && label) {
+                label.innerText = slider.value;
+            }
+        }
+
+        function validateWatermarkPath(updateAfter) {
+            var el = document.getElementById("WatermarkPath");
+
+            if (!el) {
+                return true;
+            }
+
+            var value = el.value.replace(/^\s+|\s+$/g, "");
+            var isVariablePath = /^%s_[^%]+%(?:\\.*)?$/i.test(value);
+
+            if (value === "" || isVariablePath) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            if (/\.(png|jpg|jpeg|bmp|dib|tif|tiff|tga|gif|webp)$/i.test(value)) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            showFieldError(el, "Use an FFmpeg image file such as PNG, JPG, BMP, TIFF, TGA, GIF, WEBP, or %s_variable%.");
+            if (updateAfter) updateCommand();
+            return false;
+        }
+
+        function setWatermarkPosition(value) {
+            document.getElementById("WatermarkPosition").value = value;
+            updateCommand();
+        }
+
+        function restoreWatermarkPosition() {
+            var positionEl = document.getElementById("WatermarkPosition");
+            var value = positionEl ? positionEl.value || "br" : "br";
+            var radios = document.getElementsByName("WatermarkPositionRadio");
+
+            for (var i = 0; i < radios.length; i++) {
+                radios[i].checked = radios[i].value === value;
+            }
+        }
+
+        function getWatermarkOverlayPosition(position, offsetX, offsetY) {
+            var x = offsetX !== "" ? offsetX : "0";
+            var y = offsetY !== "" ? offsetY : "0";
+
+            if (position === "tl") return x + ":" + y;
+            if (position === "tc") return "(main_w-overlay_w)/2+" + x + ":" + y;
+            if (position === "tr") return "main_w-overlay_w-" + x + ":" + y;
+            if (position === "ml") return x + ":(main_h-overlay_h)/2+" + y;
+            if (position === "mc") return "(main_w-overlay_w)/2+" + x + ":(main_h-overlay_h)/2+" + y;
+            if (position === "mr") return "main_w-overlay_w-" + x + ":(main_h-overlay_h)/2+" + y;
+            if (position === "bl") return x + ":main_h-overlay_h-" + y;
+            if (position === "bc") return "(main_w-overlay_w)/2+" + x + ":main_h-overlay_h-" + y;
+            return "main_w-overlay_w-" + x + ":main_h-overlay_h-" + y;
+        }
+
+        function buildWatermarkFilter(videoFilters, watermarkOpacity, watermarkPosition, watermarkXOffset, watermarkYOffset, watermarkResize) {
+            var opacity = parseInt(watermarkOpacity, 10);
+
+            if (isNaN(opacity)) {
+                opacity = 100;
+            }
+
+            if (opacity < 0) opacity = 0;
+            if (opacity > 100) opacity = 100;
+
+            var chain = "";
+            var baseFilters = videoFilters.join(",");
+            var alpha = opacity / 100;
+            var resize = watermarkResize || "none";
+
+            if (baseFilters !== "") {
+                chain += "[0:v]" + baseFilters + "[vbase];";
+            } else {
+                chain += "[0:v]null[vbase];";
+            }
+
+            chain += "[1:v]format=rgba";
+
+            if (opacity < 100) {
+                chain += ",colorchannelmixer=aa=" + alpha.toFixed(2);
+            }
+
+            if (resize === "fit-width") {
+                chain += "[wmraw];[wmraw][vbase]scale2ref=w=main_w:h=-1[wm][vbase2];[vbase2][wm]overlay=";
+            } else if (resize === "fit-height") {
+                chain += "[wmraw];[wmraw][vbase]scale2ref=w=-1:h=main_h[wm][vbase2];[vbase2][wm]overlay=";
+            } else if (resize === "fit-inside") {
+                chain += "[wmraw];[wmraw][vbase]scale2ref=w=main_w:h=main_h:force_original_aspect_ratio=decrease[wm][vbase2];[vbase2][wm]overlay=";
+            } else {
+                chain += "[wm];[vbase][wm]overlay=";
+            }
+
+            chain += getWatermarkOverlayPosition(watermarkPosition, watermarkXOffset, watermarkYOffset) + "[vout]";
+
+            return chain;
+        }
+
+        function updateCommand() {
+            try {
+                // Get all values safely
+                var getVal = function (id) { var e = document.getElementById(id); return e ? e.value : ""; };
+                var getChk = function (id) { var e = document.getElementById(id); return e ? e.checked : false; };
+
+                var format = getVal("Format");
+                var vCodec = getVal("VideoCodec");
+                var rcMode = getVal("RateControl") || "crf";
+                var vBitrate = getVal("VideoBitrate");
+                var crf = getVal("CRF");
+                var preset = getVal("Preset");
+                var profile = getVal("Profile");
+                var level = getVal("Level");
+                var tune = getVal("Tune");
+                var framerateMode = getVal("Framerate");
+                var framerate = framerateMode;
+                var customFramerateIsValid = true;
+
+                if (framerateMode === "custom") {
+                    framerate = getVal("FramerateCustom");
+                    customFramerateIsValid = validateFramerateCustom(false);
+                }
+
+                var scaleMode = getVal("Scale");
+                var scale = scaleMode;
+                var watermarkEnabled = getChk("WatermarkEnable");
+                var watermarkPath = getVal("WatermarkPath").replace(/^\s+|\s+$/g, "");
+                var watermarkPosition = getVal("WatermarkPosition") || "br";
+                var watermarkXOffset = getVal("WatermarkXOffset").replace(/^\s+|\s+$/g, "");
+                var watermarkYOffset = getVal("WatermarkYOffset").replace(/^\s+|\s+$/g, "");
+                var watermarkXOffsetIsValid = validateNumberOrVariable(document.getElementById("WatermarkXOffset"), true, false);
+                var watermarkYOffsetIsValid = validateNumberOrVariable(document.getElementById("WatermarkYOffset"), true, false);
+                var watermarkPathIsValid = validateWatermarkPath(false);
+                var watermarkResize = getVal("WatermarkResize") || "none";
+                var watermarkOpacity = getVal("WatermarkOpacity") || "100";
+
+                if (scaleMode === "custom") {
+                    var scaleWidth = getVal("ScaleWidth");
+                    var scaleHeight = getVal("ScaleHeight");
+                    var customScaleIsValid = validateScaleCustom(false);
+
+                    scale = customScaleIsValid && (scaleWidth !== "" || scaleHeight !== "")
+                        ? (scaleWidth !== "" ? scaleWidth : "-1") + ":" + (scaleHeight !== "" ? scaleHeight : "-1")
+                        : "";
+                }
+
+                var colorMode = getVal("ColorMode");
+                var framePacking = getVal("FramePacking");
+                var keyframeInt = getVal("KeyframeInt");
+                var minGop = getVal("MinGOP");
+                var keyframeIntIsValid = validateNumberOrVariable(document.getElementById("KeyframeInt"), true, false);
+                var minGopIsValid = validateNumberOrVariable(document.getElementById("MinGOP"), true, false);
+                var displayMode = getVal("DisplayMode");
+                var openGop = getVal("OpenGOP");
+
+                var aCodec = getVal("AudioCodec");
+                var aTrackName = getVal("AudioTrackName");
+                var aDelay = getVal("AudioDelay");
+                var aDelayIsValid = validateNumberOrVariable(document.getElementById("AudioDelay"), true, false);
+                var aLang = getVal("AudioLanguage");
+                var aBitrate = getVal("AudioBitrate");
+                var aChannels = getVal("AudioChannels");
+                var aSampleRate = getVal("AudioSampleRate");
+
+                var hwAccel = getVal("HWAccel");
+                var threads = getVal("Threads");
+                var threadsIsValid = validateNumberOrVariable(document.getElementById("Threads"), true, false);
+                var forceCfr = getVal("ForceCFR");
+                var faststart = getVal("Faststart");
+                var brand = getVal("Brand");
+                var codecId = getVal("CodecID");
+                var extraArgs = getVal("ExtraArgs");
+
+                // Dynamic UI visibility and label updating
+                var rcBitrateBox = document.getElementById("rc_bitrate_box");
+                var rcCrfBox = document.getElementById("rc_crf_box");
+                var rcLabel = document.getElementById("rc_label"); // Target our label
+
+                if (rcBitrateBox && rcCrfBox && rcLabel) {
+                    if (codecUsesGenericRateControl(vCodec)) {
+                        rcBitrateBox.style.display = (rcMode === "abr" || rcMode === "2pass") ? "block" : "none";
+                        rcCrfBox.style.display = (rcMode === "crf" || rcMode === "qp") ? "block" : "none";
+                    } else {
+                        rcBitrateBox.style.display = "none";
+                        rcCrfBox.style.display = "none";
+                    }
+
+                    // Update label text based on mode
+                    if (rcMode === "crf") {
+                        rcLabel.innerText = "CRF Value: ";
+                    } else if (rcMode === "qp") {
+                        rcLabel.innerText = "CQ Value: ";
+                    }
+
+                }
+
+                var supportsCodecPrivateParams =
+                    vCodec === "libx264" ||
+                    vCodec === "libx264rgb" ||
+                    vCodec === "libx265";
+                var framePackingRow = document.getElementById("FramePackingRow");
+                var openGopRow = document.getElementById("OpenGOPRow");
+                var faststartRow = document.getElementById("FaststartRow");
+                var brandRow = document.getElementById("BrandRow");
+                var codecIdRow = document.getElementById("CodecIDRow");
+
+                if (framePackingRow) {
+                    framePackingRow.style.display = supportsCodecPrivateParams ? "block" : "none";
+                }
+
+                if (openGopRow) {
+                    openGopRow.style.display = supportsCodecPrivateParams ? "block" : "none";
+                }
+
+                if (faststartRow) {
+                    faststartRow.style.display = (format === "mp4" || format === "mov") ? "block" : "none";
+                }
+
+                if (brandRow) {
+                    brandRow.style.display = format === "mp4" ? "block" : "none";
+                }
+
+                if (!supportsCodecPrivateParams) {
+                    var framePackingEl = document.getElementById("FramePacking");
+                    var openGopEl = document.getElementById("OpenGOP");
+
+                    if (framePackingEl) {
+                        framePackingEl.value = "none";
+                        framePacking = "none";
+                    }
+
+                    if (openGopEl) {
+                        openGopEl.value = "default";
+                        openGop = "default";
+                    }
+                }
+
+                if (format !== "mp4" && format !== "mov") {
+                    var faststartEl = document.getElementById("Faststart");
+
+                    if (faststartEl) {
+                        faststartEl.value = "default";
+                        faststart = "default";
+                    }
+                }
+
+                if (format !== "mp4") {
+                    var brandEl = document.getElementById("Brand");
+                    var codecIdEl = document.getElementById("CodecID");
+
+                    if (brandEl) {
+                        brandEl.value = "default";
+                        brand = "default";
+                    }
+
+                    if (codecIdEl) {
+                        codecIdEl.value = "default";
+                        codecId = "default";
+                    }
+                }
+
+                var cmd = "ffmpeg";
+
+                if (hwAccel !== "") cmd += " -hwaccel " + hwAccel;
+                cmd += " -i \"%s_source%\"";
+
+                if (watermarkEnabled && watermarkPath !== "" && watermarkPathIsValid && vCodec !== "copy" && vCodec !== "none") {
+                    cmd += ' -i "' + watermarkPath.replace(/"/g, '\\"') + '"';
+                }
+
+                // --- VIDEO ---
+                if (vCodec === "none") {
+                    cmd += " -vn";
+                } else if (vCodec === "copy") {
+                    cmd += " -c:v copy";
+                } else {
+                    cmd += " -c:v " + vCodec;
+
+                    // Rate Control
+                    if (codecUsesGenericRateControl(vCodec)) {
+                        if (rcMode === "crf" || rcMode === "qp") {
+                            cmd += " -" + rcMode + " " + (crf !== "" ? crf : "23");
+                        } else if (rcMode === "abr" || rcMode === "2pass") {
+                            cmd += " -b:v " + (vBitrate !== "" ? vBitrate : "1500k");
+                        }
+                    }
+
+                    if (vCodec === "prores_ks") {
+                        if (profile !== "") cmd += " -profile:v " + profile;
+                    } else {
+                        if (preset !== "") cmd += " -preset " + preset;
+                        if (tune !== "") cmd += " -tune " + tune;
+                        if (profile !== "") cmd += " -profile:v " + profile;
+                        if (level !== "" && level !== "auto") cmd += " -level:v " + level;
+                    }
+                    if (framerate !== "" && framerateMode !== "custom") {
+                        cmd += " -r " + framerate;
+                    } else if (framerateMode === "custom" && framerate !== "" && customFramerateIsValid) {
+                        cmd += " -r " + framerate;
+                    }
+                    //Video Filters start
+                    var videoFilters = [];
+
+                    if (scale !== "") {
+                        videoFilters.push("scale=" + scale);
+                    }
+
+                    var timecodeFilter = buildTimecodeFilter();
+
+                    if (timecodeFilter !== "") {
+                        videoFilters.push(timecodeFilter);
+                    }
+
+                    if (watermarkEnabled && watermarkPath !== "" && watermarkPathIsValid && watermarkXOffsetIsValid && watermarkYOffsetIsValid) {
+                        cmd += ' -filter_complex "' + buildWatermarkFilter(videoFilters, watermarkOpacity, watermarkPosition, watermarkXOffset, watermarkYOffset, watermarkResize) + '" -map "[vout]" -map 0:a?';
+                    } else if (videoFilters.length > 0) {
+                        cmd += ' -vf "' + videoFilters.join(",") + '"';
+                    }
+                    //Video Filters end
+
+                    if (colorMode !== "") cmd += " -pix_fmt " + colorMode;
+
+                    // GOP & Keyframes
+                    if (keyframeIntIsValid && keyframeInt !== "" && keyframeInt !== "0") cmd += " -g " + keyframeInt;
+                    if (minGopIsValid && minGop !== "" && minGop !== "0") cmd += " -keyint_min " + minGop;
+
+                    var codecPrivateParams = [];
+
+                    if (openGop === "on") {
+                        codecPrivateParams.push("open-gop=1");
+                    }
+
+                    if (framePacking !== "" && framePacking !== "none") {
+                        codecPrivateParams.push("frame-packing=" + framePacking);
+                    }
+
+                    if (codecPrivateParams.length > 0) {
+                        if (vCodec === "libx264" || vCodec === "libx264rgb") {
+                            cmd += " -x264opts " + codecPrivateParams.join(":");
+                        } else if (vCodec === "libx265") {
+                            cmd += " -x265-params " + codecPrivateParams.join(":");
+                        }
+                    }
+
+                    // Display Mode (Interlaced vs Progressive)
+                    if (displayMode === "Interlaced (TFF)") cmd += " -flags +ilme+ildct -top 1";
+                    if (displayMode === "Interlaced (BFF)") cmd += " -flags +ilme+ildct -top 0";
+                }
+
+                var audioCmd = "";
+                var finalOutputOptions = "";
+
+                // --- AUDIO ---
+                if (aCodec === "none") {
+                    audioCmd += " -an";
+                } else if (aCodec === "copy") {
+                    audioCmd += " -c:a copy";
+                    if (aTrackName !== "") audioCmd += " -metadata:s:a:0 title=\"" + aTrackName.replace(/"/g, "\\\"") + "\"";
+                    if (aLang !== "" && aLang !== "none") audioCmd += " -metadata:s:a:0 language=" + aLang;
+                } else {
+                    audioCmd += " -c:a " + aCodec;
+                    if (aDelayIsValid && aDelay !== "" && aDelay !== "0") {
+                        audioCmd += " -af \"adelay=" + (isFFAStransVariable(aDelay) ? aDelay : Math.round(parseFloat(aDelay))) + ":all=1\"";
+                    }
+                    if (aBitrate !== "") audioCmd += " -b:a " + aBitrate;
+                    if (aChannels !== "") audioCmd += " -ac " + aChannels;
+                    if (aSampleRate !== "" && !isNaN(aSampleRate)) {
+                        audioCmd += " -ar " + aSampleRate;
+                    }
+                    if (aTrackName !== "") audioCmd += " -metadata:s:a:0 title=\"" + aTrackName.replace(/"/g, "\\\"") + "\"";
+                    if (aLang !== "" && aLang !== "none") audioCmd += " -metadata:s:a:0 language=" + aLang;
+                }
+
+                // --- ADVANCED ---
+                if (threadsIsValid && threads !== "" && threads !== "0") cmd += " -threads " + threads;
+                if (forceCfr === "on") cmd += " -vsync cfr"; // standard way to force constant framerate in ffmpeg
+                if ((format === "mp4" || format === "mov") && faststart === "on") finalOutputOptions += " -movflags +faststart";
+                if (format === "mp4" && brand !== "" && brand !== "default") finalOutputOptions += " -brand " + brand;
+                if (format === "mp4" && codecId !== "" && codecId !== "default") finalOutputOptions += " -tag:v " + codecId;
+                if (extraArgs !== "") cmd += " " + extraArgs.trim();
+
+                // Output
+                var outputExt = format !== "" ? format : "mp4";
+                var outputPath = "%s_job_work%\\%s_job_id%_Advanced-FFmpeg." + outputExt;
+
+                if (rcMode === "2pass" && vCodec !== "copy" && codecUsesGenericRateControl(vCodec)) {
+                    var passLogPath = "%s_job_work%\\%s_job_id%_Advanced-FFmpeg_2pass";
+                    cmd = cmd + ' -pass 1 -passlogfile "' + passLogPath + '" -an -f null NUL && ' +
+                        cmd + ' -pass 2 -passlogfile "' + passLogPath + '"' + audioCmd + finalOutputOptions + ' -y "' + outputPath + '"';
+                } else {
+                    cmd += audioCmd + finalOutputOptions + ' -y "' + outputPath + '"';
+                }
+
+                document.getElementById("OutputFilePath").value = outputPath;
+
+                var outEl = document.getElementById("GeneratedCommand");
+                if (outEl) outEl.value = cmd;
+
+            } catch (err) { }
+        }
+
+        function addOption(selectEl, value, text) {
+            var opt = document.createElement("option");
+            opt.value = value;
+            opt.text = text;
+            selectEl.add(opt);
+        }
+
+        function updateProfileOptions() {
+            var codecEl = document.getElementById("VideoCodec");
+            var profileEl = document.getElementById("Profile");
+
+            if (!codecEl || !profileEl) {
+                return;
+            }
+
+            var currentProfile = profileEl.value;
+            var defaultProfile = "";
+            var profiles;
+
+            if (codecEl.value === "prores_ks") {
+                defaultProfile = "standard";
+                profiles = [
+                    { value: "proxy", text: "Proxy" },
+                    { value: "lt", text: "LT" },
+                    { value: "standard", text: "Standard" },
+                    { value: "hq", text: "HQ" },
+                    { value: "4444", text: "4444" },
+                    { value: "4444xq", text: "4444 XQ" }
+                ];
+            } else {
+                profiles = [
+                    { value: "", text: "Default" },
+                    { value: "baseline", text: "Baseline" },
+                    { value: "main", text: "Main" },
+                    { value: "high", text: "High" },
+                    { value: "high422", text: "High 4:2:2" },
+                    { value: "high444", text: "High 4:4:4" },
+                    { value: "high10", text: "High 10" },
+                    { value: "high422_10", text: "High 4:2:2 10" },
+                    { value: "high444_10", text: "High 4:4:4 10" }
+                ];
+            }
+
+            profileEl.innerHTML = "";
+
+            for (var i = 0; i < profiles.length; i++) {
+                addOption(profileEl, profiles[i].value, profiles[i].text);
+            }
+
+            for (var j = 0; j < profileEl.options.length; j++) {
+                if (profileEl.options[j].value === currentProfile) {
+                    profileEl.value = currentProfile;
+                    return;
+                }
+            }
+
+            profileEl.value = defaultProfile;
+        }
+
+        function updateColorModes() {
+            var codecEl = document.getElementById("VideoCodec");
+            var colorEl = document.getElementById("ColorMode");
+
+            if (!codecEl || !colorEl) {
+                return;
+            }
+
+            var currentColor = colorEl.value;
+            var codec = codecEl.value;
+            var all420 = [
+                { value: "yuv420p", text: "YUV 4:2:0 Planar 8bpp" }
+            ];
+            var h264Software = [
+                { value: "yuv420p", text: "YUV 4:2:0 Planar 8bpp" },
+                { value: "yuv420p10le", text: "YUV 4:2:0 Planar 10bpp" },
+                { value: "yuv422p", text: "YUV 4:2:2" }
+            ];
+            var hevcSoftware = [
+                { value: "yuv420p", text: "YUV 4:2:0 Planar 8bpp" },
+                { value: "yuv420p10le", text: "YUV 4:2:0 Planar 10bpp" },
+                { value: "yuv420p12le", text: "YUV 4:2:0 Planar 12bpp" },
+                { value: "yuv422p", text: "YUV 4:2:2" }
+            ];
+            var hevcHardware = [
+                { value: "yuv420p", text: "YUV 4:2:0 Planar 8bpp" },
+                { value: "yuv420p10le", text: "YUV 4:2:0 Planar 10bpp" }
+            ];
+            var yuv420And422 = [
+                { value: "yuv420p", text: "YUV 4:2:0 Planar 8bpp" },
+                { value: "yuv422p", text: "YUV 4:2:2" }
+            ];
+            var forceDefinedColor =
+                codec === "h264_nvenc" ||
+                codec === "h264_amf" ||
+                codec === "h264_qsv" ||
+                codec === "hevc_nvenc" ||
+                codec === "hevc_amf" ||
+                codec === "hevc_qsv" ||
+                codec === "hevc_d3d12va" ||
+                codec === "av1_nvenc" ||
+                codec === "av1_amf" ||
+                codec === "av1_qsv" ||
+                codec === "libsvtav1" ||
+                codec === "vp9_qsv" ||
+                codec === "mpeg4" ||
+                codec === "libxvid" ||
+                codec === "mjpeg" ||
+                codec === "mjpeg_qsv" ||
+                codec === "prores_ks" ||
+                codec === "mpeg2video" ||
+                codec === "mpeg2_qsv";
+            var colorModes = [
+                { value: "", text: "Keep Original" }
+            ];
+
+            if (forceDefinedColor) {
+                colorModes = [];
+            }
+
+            if (codec === "none" || codec === "copy" || codec === "mpeg1video" || codec === "libx264rgb") {
+                // Keep Original only.
+            } else if (codec === "libx264") {
+                colorModes = colorModes.concat(h264Software);
+            } else if (codec === "h264_nvenc" || codec === "h264_amf" || codec === "h264_qsv") {
+                colorModes = colorModes.concat(all420);
+            } else if (codec === "libx265" || codec === "libaom-av1" || codec === "librav1e" || codec === "libvpx-vp9") {
+                colorModes = colorModes.concat(hevcSoftware);
+            } else if (
+                codec === "hevc_nvenc" ||
+                codec === "hevc_amf" ||
+                codec === "hevc_qsv" ||
+                codec === "hevc_d3d12va" ||
+                codec === "av1_nvenc" ||
+                codec === "av1_amf" ||
+                codec === "av1_qsv" ||
+                codec === "libsvtav1" ||
+                codec === "vp9_qsv"
+            ) {
+                colorModes = colorModes.concat(hevcHardware);
+            } else if (codec === "mpeg4" || codec === "libxvid") {
+                colorModes = colorModes.concat(all420);
+            } else if (codec === "mjpeg" || codec === "mjpeg_qsv" || codec === "mpeg2video" || codec === "mpeg2_qsv") {
+                colorModes = colorModes.concat(yuv420And422);
+            } else if (codec === "prores_ks") {
+                colorModes = colorModes.concat([
+                    { value: "yuv422p10le", text: "YUV 4:2:2 10bpp" },
+                    { value: "yuv444p10le", text: "YUV 4:4:4 10bpp" },
+                    { value: "yuva444p10le", text: "YUVA 4:4:4:4 10bpp" }
+                ]);
+            } else {
+                colorModes = colorModes.concat(all420);
+            }
+
+            colorEl.innerHTML = "";
+
+            for (var i = 0; i < colorModes.length; i++) {
+                addOption(colorEl, colorModes[i].value, colorModes[i].text);
+            }
+
+            var colorModeRow = document.getElementById("ColorModeRow");
+
+            if (colorModeRow) {
+                colorModeRow.style.display = colorModes.length > 1 || (colorModes.length === 1 && colorModes[0].value !== "") ? "block" : "none";
+            }
+
+            for (var j = 0; j < colorEl.options.length; j++) {
+                if (colorEl.options[j].value === currentColor) {
+                    colorEl.value = currentColor;
+                    return;
+                }
+            }
+
+            colorEl.value = colorEl.options.length > 0 ? colorEl.options[0].value : "";
+        }
+
+        function updateVideoCodec() {
+            updateProfileOptions();
+            updateColorModes();
+            updateCodecIdOptions();
+            updateRateControlOptions();
+            toggleWatermarkOptions();
+            updateCommand();
+        }
+
+        function codecUsesGenericRateControl(codec) {
+            return codec !== "prores_ks" && codec !== "copy" && codec !== "none";
+        }
+
+        function setInlineControlVisible(id, visible) {
+            var el = document.getElementById(id);
+
+            if (!el) {
+                return;
+            }
+
+            el.style.display = visible ? "" : "none";
+
+            var rowTarget = el;
+
+            if (id === "Framerate" && el.parentNode && el.parentNode.id === "FramerateControls") {
+                rowTarget = el.parentNode;
+                rowTarget.style.display = visible ? "inline-block" : "none";
+            }
+
+            var helpWrap = document.getElementById("OptionHelpWrap_" + id);
+            if (helpWrap) helpWrap.style.display = visible ? "inline-block" : "none";
+
+            var buttons = getRelatedButtons(el);
+            for (var i = 0; i < buttons.length; i++) {
+                buttons[i].style.display = visible ? "" : "none";
+            }
+
+            var node = rowTarget.previousSibling;
+            while (node) {
+                if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === "label") {
+                    node.style.display = visible ? "" : "none";
+                    break;
+                }
+                node = node.previousSibling;
+            }
+
+            node = rowTarget.nextSibling;
+            while (node) {
+                if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === "br") {
+                    node.style.display = visible ? "" : "none";
+                    break;
+                }
+                if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === "label") {
+                    break;
+                }
+                node = node.nextSibling;
+            }
+        }
+
+        function setVideoControlsVisible(visible) {
+            var inlineControls = [
+                "RateControl",
+                "Preset",
+                "Profile",
+                "Level",
+                "Tune",
+                "Framerate",
+                "DisplayMode",
+                "KeyframeInt",
+                "MinGOP"
+            ];
+
+            for (var i = 0; i < inlineControls.length; i++) {
+                setInlineControlVisible(inlineControls[i], visible);
+            }
+
+            var blocks = [
+                "rc_bitrate_box",
+                "rc_crf_box",
+                "ColorModeRow",
+                "FramePackingRow",
+                "OpenGOPRow"
+            ];
+
+            for (var j = 0; j < blocks.length; j++) {
+                var block = document.getElementById(blocks[j]);
+                if (block) block.style.display = visible ? "" : "none";
+            }
+        }
+
+        function updateRateControlOptions() {
+            var codecEl = document.getElementById("VideoCodec");
+            var rateControlEl = document.getElementById("RateControl");
+            var bitrateBox = document.getElementById("rc_bitrate_box");
+            var crfBox = document.getElementById("rc_crf_box");
+
+            if (!codecEl || !rateControlEl) {
+                return;
+            }
+
+            var enabled = codecUsesGenericRateControl(codecEl.value);
+            rateControlEl.disabled = !enabled;
+
+            if (!enabled) {
+                if (bitrateBox) bitrateBox.style.display = "none";
+                if (crfBox) crfBox.style.display = "none";
+            }
+
+            setVideoControlsVisible(codecEl.value !== "none");
+        }
+
+        function updateCodecIdOptions() {
+            var formatEl = document.getElementById("Format");
+            var codecEl = document.getElementById("VideoCodec");
+            var codecIdEl = document.getElementById("CodecID");
+            var codecIdRow = document.getElementById("CodecIDRow");
+
+            if (!formatEl || !codecEl || !codecIdEl || !codecIdRow) {
+                return;
+            }
+
+            var format = formatEl.value;
+            var codec = codecEl.value;
+            var currentCodecId = codecIdEl.value;
+            var codecIds = [];
+
+            if (format === "mp4") {
+                if (
+                    codec === "libx264" ||
+                    codec === "libx264rgb" ||
+                    codec === "h264_amf" ||
+                    codec === "h264_nvenc" ||
+                    codec === "h264_qsv"
+                ) {
+                    codecIds = [
+                        { value: "default", text: "Default" },
+                        { value: "avc1", text: "avc1 (H.264 MP4)" }
+                    ];
+                } else if (
+                    codec === "libx265" ||
+                    codec === "hevc_amf" ||
+                    codec === "hevc_d3d12va" ||
+                    codec === "hevc_nvenc" ||
+                    codec === "hevc_qsv"
+                ) {
+                    codecIds = [
+                        { value: "default", text: "Default" },
+                        { value: "hvc1", text: "hvc1 (HEVC Apple/QuickTime)" },
+                        { value: "hev1", text: "hev1 (HEVC MP4)" }
+                    ];
+                } else if (codec === "mpeg4" || codec === "libxvid") {
+                    codecIds = [
+                        { value: "default", text: "Default" },
+                        { value: "mp4v", text: "mp4v (MPEG-4 Part 2)" }
+                    ];
+                }
+            }
+
+            codecIdEl.innerHTML = "";
+
+            if (codecIds.length === 0) {
+                addOption(codecIdEl, "default", "Default");
+                codecIdEl.value = "default";
+                codecIdRow.style.display = "none";
+                return;
+            }
+
+            for (var i = 0; i < codecIds.length; i++) {
+                addOption(codecIdEl, codecIds[i].value, codecIds[i].text);
+            }
+
+            codecIdRow.style.display = "block";
+
+            for (var j = 0; j < codecIdEl.options.length; j++) {
+                if (codecIdEl.options[j].value === currentCodecId) {
+                    codecIdEl.value = currentCodecId;
+                    return;
+                }
+            }
+
+            codecIdEl.value = "default";
+        }
+
+        function toggleAudioOptions() {
+            var audioCodec = document.getElementById("AudioCodec");
+            var audioOptions = document.getElementById("AudioOptions");
+            var audioBitrate = document.getElementById("AudioBitrate");
+            var bitrateRow = document.getElementById("AudioBitrateRow");
+
+            if (audioOptions && audioCodec) {
+                audioOptions.style.display = (audioCodec.value === "none" || audioCodec.value === "copy") ? "none" : "block";
+            }
+
+            if (audioBitrate && audioCodec) {
+                var isLosslessAudio = audioCodec.value === "alac" ||
+                    audioCodec.value === "pcm_s16le" ||
+                    audioCodec.value === "pcm_s24le";
+
+                audioBitrate.disabled = isLosslessAudio;
+                if (bitrateRow) bitrateRow.style.display = isLosslessAudio ? "none" : "block";
+
+                if (isLosslessAudio) {
+                    audioBitrate.value = "";
+                }
+            }
+
+            updateCommand();
+        }
+
+        function updateAudioCodecs() {
+            var formatEl = document.getElementById("Format");
+            var audioCodecEl = document.getElementById("AudioCodec");
+
+            if (!formatEl || !audioCodecEl) {
+                return;
+            }
+
+            var format = formatEl.value;
+            var currentCodec = audioCodecEl.value;
+            var codecs;
+
+            if (format === "mov") {
+                codecs = [
+                    { value: "aac", text: "AAC" },
+                    { value: "libfdk_aac", text: "AAC (libfdk_aac external FFmpeg)" },
+                    { value: "alac", text: "ALAC" },
+                    { value: "pcm_s16le", text: "PCM 16-bit" },
+                    { value: "pcm_s24le", text: "PCM 24-bit" },
+                    { value: "ac3", text: "AC-3" },
+                    { value: "eac3", text: "E-AC-3" },
+                    { value: "copy", text: "Copy (Source codec must be MOV-compatible)" },
+                    { value: "none", text: "No Audio" }
+                ];
+            } else {
+                codecs = [
+                    { value: "aac", text: "AAC" },
+                    { value: "libfdk_aac", text: "AAC (libfdk_aac external FFmpeg)" },
+                    { value: "libmp3lame", text: "MP3" },
+                    { value: "ac3", text: "AC-3" },
+                    { value: "eac3", text: "E-AC-3" },
+                    { value: "alac", text: "ALAC" },
+                    { value: "copy", text: "Copy (No Re-encode)" },
+                    { value: "none", text: "No Audio" }
+                ];
+            }
+
+            audioCodecEl.innerHTML = "";
+
+            for (var i = 0; i < codecs.length; i++) {
+                addOption(audioCodecEl, codecs[i].value, codecs[i].text);
+            }
+
+            for (var j = 0; j < audioCodecEl.options.length; j++) {
+                if (audioCodecEl.options[j].value === currentCodec) {
+                    audioCodecEl.value = currentCodec;
+                    toggleAudioOptions();
+                    return;
+                }
+            }
+
+            audioCodecEl.value = "aac";
+            toggleAudioOptions();
+        }
+
+        function sortAudioLanguages() {
+            var languageSelect = document.getElementById("AudioLanguage");
+
+            if (!languageSelect || languageSelect.options.length < 2) {
+                return;
+            }
+
+            var currentValue = languageSelect.value;
+            var options = [];
+
+            for (var i = 0; i < languageSelect.options.length; i++) {
+                if (languageSelect.options[i].value !== "none") {
+                    options.push({
+                        value: languageSelect.options[i].value,
+                        text: languageSelect.options[i].text
+                    });
+                }
+            }
+
+            options.sort(function (a, b) {
+                var at = a.text.toLowerCase();
+                var bt = b.text.toLowerCase();
+
+                if (at < bt) return -1;
+                if (at > bt) return 1;
+                return 0;
+            });
+
+            languageSelect.innerHTML = "";
+            addOption(languageSelect, "none", "none");
+
+            for (var j = 0; j < options.length; j++) {
+                addOption(languageSelect, options[j].value, options[j].text);
+            }
+
+            languageSelect.value = currentValue;
+
+            if (languageSelect.value !== currentValue) {
+                languageSelect.value = "none";
+            }
+        }
+
+        function updateCodecs() {
+            var formatEl = document.getElementById("Format");
+            if (!formatEl) return; // Exit if the element doesn't exist yet
+
+            var format = formatEl.value;
+            var codecSelect = document.getElementById("VideoCodec");
+            if (!codecSelect) return;
+
+            var currentCodec = codecSelect.value;
+
+            // Clear existing options
+            codecSelect.innerHTML = "";
+
+            if (format === "mp4" || format === "mov") {
+                var mp4Codecs = format === "mov" ? [
+                    { value: "prores_ks", text: "Apple ProRes" },
+                    { value: "libx264", text: "MPEG-4 AVC / H.264" },
+                    { value: "libx264rgb", text: "MPEG-4 AVC / H.264 RGB" },
+                    { value: "h264_amf", text: "MPEG-4 AVC / H.264 (AMD AMF)" },
+                    { value: "h264_nvenc", text: "MPEG-4 AVC / H.264 (Nvidia NVENC)" },
+                    { value: "h264_qsv", text: "MPEG-4 AVC / H.264 (Intel Quick Sync)" },
+                    { value: "libx265", text: "HEVC / H.265" },
+                    { value: "hevc_amf", text: "HEVC / H.265 (AMD AMF)" },
+                    { value: "hevc_d3d12va", text: "HEVC / H.265 (Direct3D 12)" },
+                    { value: "hevc_nvenc", text: "HEVC / H.265 (Nvidia NVENC)" },
+                    { value: "hevc_qsv", text: "HEVC / H.265 (Intel Quick Sync)" },
+                    { value: "mpeg4", text: "MPEG-4 Part 2" },
+                    { value: "mjpeg", text: "Motion JPEG" },
+                    { value: "mjpeg_qsv", text: "Motion JPEG (Intel Quick Sync)" },
+                    { value: "copy", text: "Copy (Source codec must be MOV-compatible)" },
+                    { value: "none", text: "No Video" }
+                ] : [
+                    { value: "libx264", text: "MPEG-4 AVC / H.264" },
+                    { value: "libx264rgb", text: "MPEG-4 AVC / H.264 RGB" },
+                    { value: "h264_amf", text: "MPEG-4 AVC / H.264 (AMD AMF)" },
+                    { value: "h264_nvenc", text: "MPEG-4 AVC / H.264 (Nvidia NVENC)" },
+                    { value: "h264_qsv", text: "MPEG-4 AVC / H.264 (Intel Quick Sync)" },
+                    { value: "libx265", text: "HEVC / H.265" },
+                    { value: "hevc_amf", text: "HEVC / H.265 (AMD AMF)" },
+                    { value: "hevc_d3d12va", text: "HEVC / H.265 (Direct3D 12)" },
+                    { value: "hevc_nvenc", text: "HEVC / H.265 (Nvidia NVENC)" },
+                    { value: "hevc_qsv", text: "HEVC / H.265 (Intel Quick Sync)" },
+                    { value: "libaom-av1", text: "AV1 (libaom)" },
+                    { value: "librav1e", text: "AV1 (rav1e)" },
+                    { value: "libsvtav1", text: "AV1 (SVT-AV1)" },
+                    { value: "av1_amf", text: "AV1 (AMD AMF)" },
+                    { value: "av1_nvenc", text: "AV1 (Nvidia NVENC)" },
+                    { value: "av1_qsv", text: "AV1 (Intel Quick Sync)" },
+                    { value: "mpeg4", text: "MPEG-4 Part 2" },
+                    { value: "libxvid", text: "XviD / MPEG-4 Part 2" },
+                    { value: "libvpx-vp9", text: "VP9" },
+                    { value: "vp9_qsv", text: "VP9 (Intel Quick Sync)" },
+                    { value: "mjpeg", text: "Motion JPEG" },
+                    { value: "mjpeg_qsv", text: "Motion JPEG (Intel Quick Sync)" },
+                    { value: "mpeg1video", text: "MPEG-1" },
+                    { value: "mpeg2video", text: "MPEG-2" },
+                    { value: "mpeg2_qsv", text: "MPEG-2 (Intel Quick Sync)" },
+                    { value: "copy", text: "Copy (Source codec must be MP4-compatible)" },
+                    { value: "none", text: "No Video" }
+                ];
+
+                for (var i = 0; i < mp4Codecs.length; i++) {
+                    addOption(codecSelect, mp4Codecs[i].value, mp4Codecs[i].text);
+                }
+            } else {
+                // Fallback options for MKV, MOV, TS, etc.
+                var defaultCodecs = [
+                    { value: "libx264", text: "MPEG-4 AVC / H.264" },
+                    { value: "libx265", text: "HEVC / H.265" },
+                    { value: "prores_ks", text: "Apple ProRes" },
+                    { value: "copy", text: "Copy (No Re-encode)" }
+                ];
+                for (var j = 0; j < defaultCodecs.length; j++) {
+                    addOption(codecSelect, defaultCodecs[j].value, defaultCodecs[j].text);
+                }
+            }
+
+            // Restore the previously selected codec if it exists in the newly generated list
+            var optionExists = false;
+            for (var k = 0; k < codecSelect.options.length; k++) {
+                if (codecSelect.options[k].value === currentCodec) {
+                    optionExists = true;
+                    break;
+                }
+            }
+
+            if (optionExists) {
+                codecSelect.value = currentCodec;
+            }
+
+            updateProfileOptions();
+            updateColorModes();
+            updateCodecIdOptions();
+            updateRateControlOptions();
+            updateAudioCodecs();
+
+            // Trigger command generation
+            updateCommand();
+        }
+
+        function toggleFFmpegMode() {
+            var mode = document.getElementById("FFmpegMode").value;
+            var pathInput = document.getElementById("FFmpegPath");
+            var varsBtn = document.getElementById("FFmpegVarsBtn");
+            var fileBrowserBtn = document.getElementById("FFmpegPathAfter");
+            var hint = document.getElementById(pathInput.id + "_hint");
+
+            if (mode === "internal") {
+                var is64bit = /Win64|x64|WOW64/i.test(navigator.userAgent);
+
+                pathInput.value = is64bit
+                    ? "%s_ffmpegx64%"
+                    : "%s_ffmpegx%";
+
+                pathInput.disabled = true;
+                pathInput.style.backgroundColor = "";
+
+                varsBtn.style.display = "none";
+                fileBrowserBtn.style.display = "none";
+
+                if (hint) {
+                    hint.innerText = "";
+                }
+            } else {
+                pathInput.disabled = false;
+
+                // Show buttons
+                varsBtn.style.display = "inline-block";
+                fileBrowserBtn.style.display = "inline-block";
+
+
+                // Remove either internal FFmpeg variable
+                if (
+                    pathInput.value === "%s_ffmpegx64%" ||
+                    pathInput.value === "%s_ffmpegx%"
+                ) {
+                    pathInput.value = "";
+                }
+
+                // Empty value returns without creating a hint
+                validateFFmpegPathField(pathInput);
+
+            }
+        }
+        function toggleFramerateCustom() {
+            var framerateSelect = document.getElementById("Framerate");
+            var customInput = document.getElementById("FramerateCustom");
+            var varsBtn = document.getElementById("FramerateCustomVarsBtn");
+
+            if (!framerateSelect || !customInput) {
+                return;
+            }
+
+            if (framerateSelect.value === "custom") {
+                customInput.style.display = "inline-block";
+                if (varsBtn) varsBtn.style.display = "inline-block";
+            } else {
+                customInput.style.display = "none";
+                if (varsBtn) varsBtn.style.display = "none";
+                clearFieldError(customInput);
+            }
+
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function toggleResolutionCustom() {
+            var scale = document.getElementById("Scale");
+            var box = document.getElementById("ScaleCustomBox");
+            var widthInput = document.getElementById("ScaleWidth");
+            var heightInput = document.getElementById("ScaleHeight");
+
+            box.style.display = scale.value === "custom" ? "block" : "none";
+
+            if (scale.value !== "custom") {
+                if (widthInput) clearFieldError(widthInput);
+                if (heightInput) clearFieldError(heightInput);
+            }
+
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function validateFFmpegPathField(el) {
+            if (!el) return false;
+
+            var mode = document.getElementById("FFmpegMode");
+            var value = el.value.trim();
+            var hintId = el.id + "_hint";
+            var hint = document.getElementById(hintId);
+
+            function clearError() {
+                el.style.backgroundColor = "";
+                if (hint) hint.innerText = "";
+            }
+
+            function showError(message) {
+                if (!hint) {
+                    hint = document.createElement("div");
+                    hint.id = hintId;
+                    hint.style.color = "red";
+                    hint.style.fontSize = "11px";
+                    hint.style.marginTop = "2px";
+                    hint.style.marginLeft = "144px";
+                    hint.style.marginBottom = "5px";
+
+                    var target =
+                        document.getElementById("FFmpegPathAfter") ||
+                        document.getElementById("FFmpegVarsBtn") ||
+                        el;
+
+                    if (target.nextSibling) {
+                        target.parentNode.insertBefore(hint, target.nextSibling);
+                    } else {
+                        target.parentNode.appendChild(hint);
+                    }
+                }
+
+                el.style.backgroundColor = "#ffe5e5";
+                hint.innerText = message;
+                return false;
+            }
+
+            if (mode && mode.value !== "external") {
+                clearError();
+                return true;
+            }
+
+            if (value === "") {
+                clearError();
+                return false;
+            }
+
+            // Remove matching surrounding quotes
+            if (
+                value.length >= 2 &&
+                value.charAt(0) === '"' &&
+                value.charAt(value.length - 1) === '"'
+            ) {
+                value = value.substring(1, value.length - 1);
+            }
+
+            // Reject incomplete or unmatched quotes
+            if (value.indexOf('"') !== -1) {
+                return showError("Invalid path: quotation marks are not allowed inside the path.");
+            }
+
+            // Reject forward slashes
+            if (value.indexOf("/") !== -1) {
+                return showError("Invalid path: use Windows backslashes instead of forward slashes.");
+            }
+
+            var isVariablePath = /^%s_[^%]+%(?:\\.*)?$/i.test(value);
+            var isVariableOnlyPath = /^%s_[^%]+%$/i.test(value);
+            var isDrivePath = /^[a-zA-Z]:\\/.test(value);
+            var isUncPath = /^\\\\[^\\]+\\[^\\]+/.test(value);
+
+            if (!isVariablePath && !isDrivePath && !isUncPath) {
+                return showError(
+                    "Use a complete Windows path, UNC path or %s_variable% path."
+                );
+            }
+
+            var segments = value.split("\\");
+            var startIndex = 0;
+
+            if (isUncPath) {
+                // \\server\share\folder\ffmpeg.exe
+                startIndex = 2;
+
+                if (
+                    segments.length < 5 ||
+                    segments[2] === "" ||
+                    segments[3] === ""
+                ) {
+                    return showError(
+                        "Invalid UNC path. A server and share name are required."
+                    );
+                }
+            } else if (isDrivePath) {
+                // C:\folder\ffmpeg.exe
+                startIndex = 1;
+
+                if (!/^[a-zA-Z]:$/.test(segments[0])) {
+                    return showError("Invalid Windows drive path.");
+                }
+            }
+
+            var forbiddenChars = /[<>:"|?*\n\r]/;
+
+            for (var i = startIndex; i < segments.length; i++) {
+                var segment = segments[i];
+
+                if (segment === "") {
+                    return showError(
+                        "Invalid path: empty folders or consecutive backslashes are not allowed."
+                    );
+                }
+
+                var variableMatch = segment.match(/^%s_[^%]+%/i);
+
+                if (variableMatch) {
+                    var suffix = segment.substring(variableMatch[0].length);
+
+                    if (forbiddenChars.test(suffix)) {
+                        return showError(
+                            "Invalid characters after variable: " + suffix
+                        );
+                    }
+                } else if (forbiddenChars.test(segment)) {
+                    return showError(
+                        "Invalid characters in path segment: " + segment
+                    );
+                }
+            }
+
+            if (isVariableOnlyPath) {
+                clearError();
+                return true;
+            }
+
+            var fileName = segments[segments.length - 1];
+
+            if (fileName.toLowerCase() !== "ffmpeg.exe") {
+                return showError(
+                    "The complete path must end with ffmpeg.exe."
+                );
+            }
+
+            // Require at least a directory plus ffmpeg.exe
+            if (
+                isDrivePath &&
+                segments.length < 3
+            ) {
+                return showError(
+                    "Enter the complete path to ffmpeg.exe, including its folder."
+                );
+            }
+
+            clearError();
+            return true;
+        }
+
+        // Hint Code
+        function getFieldHint(el) {
+            var hintId = el.id + "_hint";
+            var hint = document.getElementById(hintId);
+
+            if (!hint) {
+                hint = document.createElement("div");
+                hint.id = hintId;
+                hint.className = "ffas-field-hint";
+
+                var insertAfter = el;
+                var relatedButtons = el.parentNode.querySelectorAll(
+                    '[data-parent="' + el.id + '"]'
+                );
+
+                if (relatedButtons.length > 0) {
+                    insertAfter = relatedButtons[relatedButtons.length - 1];
+                }
+
+                var helpWrap = document.getElementById("OptionHelpWrap_" + el.id);
+
+                if (helpWrap) {
+                    insertAfter = helpWrap;
+                }
+
+                if (insertAfter.nextSibling) {
+                    insertAfter.parentNode.insertBefore(
+                        hint,
+                        insertAfter.nextSibling
+                    );
+                } else {
+                    insertAfter.parentNode.appendChild(hint);
+                }
+            }
+
+            return hint;
+        }
+
+        function showFieldError(el, message) {
+            var hint = getFieldHint(el);
+
+            hint.innerHTML = message;
+
+            if (el.className.indexOf("ffas-input-error") === -1) {
+                el.className += " ffas-input-error";
+            }
+        }
+
+        function clearFieldError(el) {
+            var hint = document.getElementById(el.id + "_hint");
+
+            if (hint) {
+                hint.innerHTML = "";
+            }
+
+            el.className = el.className
+                .replace(/\s*ffas-input-error/g, "");
+        }
+
+        function validateFramerateCustom(updateAfter) {
+            var el = document.getElementById("FramerateCustom");
+
+            if (!el) {
+                return true;
+            }
+
+            var value = el.value.replace(/^\s+|\s+$/g, "");
+            var isVariable = /^%s_[^%]+%$/i.test(value);
+            var isDecimal = /^(?:[1-9]\d*)(?:\.\d+)?$/.test(value) || /^0\.\d*[1-9]\d*$/.test(value);
+            var rationalMatch = value.match(/^([1-9]\d*)\/([1-9]\d*)$/);
+            var isRational = false;
+
+            if (rationalMatch) {
+                isRational = parseInt(rationalMatch[1], 10) > 0 &&
+                    parseInt(rationalMatch[2], 10) > 0;
+            }
+
+            if (value === "") {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            if (isVariable || isDecimal || isRational) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            showFieldError(el, "Use a framerate like 25, 23.976, 24000/1001, or %s_variable%.");
+            if (updateAfter) updateCommand();
+            return false;
+        }
+
+        function validateScaleDimension(el) {
+            if (!el) {
+                return true;
+            }
+
+            var value = el.value.replace(/^\s+|\s+$/g, "");
+            var isVariable = /^%s_[^%]+%$/i.test(value);
+            var isScaleAuto = value === "-1";
+            var isPositiveInteger = /^[1-9]\d*$/.test(value);
+
+            if (value === "") {
+                clearFieldError(el);
+                return true;
+            }
+
+            if (isVariable || isScaleAuto || isPositiveInteger) {
+                clearFieldError(el);
+                return true;
+            }
+
+            showFieldError(el, "Use a positive number, -1, or %s_variable%.");
+            return false;
+        }
+
+        function validateScaleCustom(updateAfter) {
+            var widthInput = document.getElementById("ScaleWidth");
+            var heightInput = document.getElementById("ScaleHeight");
+            var widthValid = validateScaleDimension(widthInput);
+            var heightValid = validateScaleDimension(heightInput);
+
+            if (updateAfter) {
+                updateCommand();
+            }
+
+            return widthValid && heightValid;
+        }
+
+        function isFFAStransVariable(value) {
+            return /^%s_[^%]+%$/i.test(value);
+        }
+
+        function validateNumberOrVariable(el, allowZero, updateAfter) {
+            if (!el) {
+                return true;
+            }
+
+            var value = el.value.replace(/^\s+|\s+$/g, "");
+            var isVariable = isFFAStransVariable(value);
+            var isNumber = allowZero ? /^(?:0|[1-9]\d*)$/.test(value) : /^[1-9]\d*$/.test(value);
+
+            if (value === "") {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            if (isVariable || isNumber) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            showFieldError(el, allowZero ? "Use 0, a positive number, or %s_variable%." : "Use a positive number or %s_variable%.");
+            if (updateAfter) updateCommand();
+            return false;
+        }
+
+        function handleZeroDefaultInput(el) {
+            validateNumberOrVariable(el, true, true);
+            return true;
+        }
+
+        function handleZeroDefaultBlur(el) {
+            if (!el) {
+                return true;
+            }
+
+            if (el.value.replace(/^\s+|\s+$/g, "") === "") {
+                el.value = "0";
+            }
+
+            validateNumberOrVariable(el, true, true);
+            return true;
+        }
+
+        function validateStartTimecode(updateAfter, resetEmpty) {
+            var el = document.getElementById("TCStart");
+
+            if (!el) {
+                return true;
+            }
+
+            var value = el.value.replace(/^\s+|\s+$/g, "");
+            var isValid = /^\d{2,}:[0-5]\d:[0-5]\d[:;]\d{2}$/.test(value);
+
+            if ((value === "" || value === "0") && resetEmpty) {
+                el.value = "00:00:00:00";
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            if ((value === "" || value === "0") && !resetEmpty) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            if (isValid) {
+                clearFieldError(el);
+                if (updateAfter) updateCommand();
+                return true;
+            }
+
+            showFieldError(el, "Use timecode like 00:00:00:00 or 00:00:00;00.");
+            if (updateAfter) updateCommand();
+            return false;
+        }
+
+        function clearZeroDefault(el) {
+            if (el && el.value === "0") {
+                el.value = "";
+                clearFieldError(el);
+                updateCommand();
+            }
+        }
+
+        function toggleTimecode() {
+            var enabled = document.getElementById("TCEnable").checked;
+            document.getElementById("TCSettings").style.display =
+                enabled ? "block" : "none";
+
+            toggleTCSourceFallback();
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function toggleTCSourceFallback() {
+            var useSource = document.getElementById("TCUseSource");
+            var fallbackRow = document.getElementById("TCSourceFallbackRow");
+
+            if (fallbackRow) {
+                fallbackRow.style.display = useSource && useSource.checked ? "block" : "none";
+            }
+
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function toggleTCSizeCustom() {
+            var sizeSelect = document.getElementById("TCSize");
+            var customBox = document.getElementById("TCSizeCustomBox");
+
+            if (!sizeSelect || !customBox) {
+                return;
+            }
+
+            customBox.style.display = sizeSelect.value === "custom" ? "block" : "none";
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function normalizeTCSizeCustom() {
+            var input = document.getElementById("TCSizeCustom");
+
+            if (!input) {
+                return 4;
+            }
+
+            var value = parseFloat(input.value);
+
+            if (isNaN(value)) {
+                value = 4;
+            }
+
+            if (value < 1) {
+                value = 1;
+            }
+
+            if (value > 20) {
+                value = 20;
+            }
+
+            value = Math.round(value);
+            input.value = value;
+            return value;
+        }
+
+        function adjustTCSizeCustom(delta) {
+            var input = document.getElementById("TCSizeCustom");
+
+            if (!input) {
+                return false;
+            }
+
+            var value = normalizeTCSizeCustom();
+            input.value = value + delta;
+            normalizeTCSizeCustom();
+            updateCommand();
+            return false;
+        }
+
+        function syncTCOpacity(sliderId, labelId) {
+            document.getElementById(labelId).innerHTML =
+                document.getElementById(sliderId).value;
+
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function populateTCFonts() {
+            var fontSelect = document.getElementById("TCFont");
+
+            if (!fontSelect) {
+                return;
+            }
+
+            var currentFont = fontSelect.value;
+            var fonts = [
+                { value: "C:\\Windows\\Fonts\\arial.ttf", text: "Arial" },
+                { value: "C:\\Windows\\Fonts\\calibri.ttf", text: "Calibri" },
+                { value: "C:\\Windows\\Fonts\\consola.ttf", text: "Consolas" },
+                { value: "C:\\Windows\\Fonts\\cour.ttf", text: "Courier New" },
+                { value: "C:\\Windows\\Fonts\\tahoma.ttf", text: "Tahoma" }
+            ];
+
+            fontSelect.innerHTML = "";
+            addOption(fontSelect, "default", "Default");
+
+            for (var i = 0; i < fonts.length; i++) {
+                addOption(fontSelect, fonts[i].value, fonts[i].text);
+            }
+
+            addOption(fontSelect, "custom", "Custom...");
+
+            for (var j = 0; j < fontSelect.options.length; j++) {
+                if (fontSelect.options[j].value === currentFont) {
+                    fontSelect.value = currentFont;
+                    toggleTCFontCustom();
+                    return;
+                }
+            }
+
+            fontSelect.value = "default";
+            toggleTCFontCustom();
+        }
+
+        function toggleTCFontCustom() {
+            var fontSelect = document.getElementById("TCFont");
+            var customBox = document.getElementById("TCFontCustomBox");
+
+            if (fontSelect && customBox) {
+                customBox.style.display = fontSelect.value === "custom" ? "inline-block" : "none";
+            }
+
+            initOptionHelp();
+            updateCommand();
+        }
+
+        function resolveTimecodeFont() {
+            var fontSelect = document.getElementById("TCFont");
+            var customInput = document.getElementById("TCFontCustom");
+
+            if (!fontSelect || fontSelect.value === "" || fontSelect.value === "default") {
+                return { option: "", value: "" };
+            }
+
+            var fontValue = fontSelect.value === "custom" && customInput
+                ? customInput.value.replace(/^\s+|\s+$/g, "")
+                : fontSelect.value;
+
+            if (fontValue === "") {
+                return { option: "", value: "" };
+            }
+
+            if (/([\/\\]|\.ttf$|\.otf$|\.ttc$)/i.test(fontValue)) {
+                return { option: "fontfile", value: fontValue };
+            }
+
+            return { option: "font", value: fontValue };
+        }
+
+        function escapeDrawtextValue(value) {
+            return value
+                .replace(/\\/g, "/")
+                .replace(/:/g, "\\:")
+                .replace(/'/g, "\\'");
+        }
+
+        function buildTimecodeFilter() {
+            if (!document.getElementById("TCEnable").checked) return "";
+
+            var useSource = document.getElementById("TCUseSource").checked;
+            var tc = useSource
+                ? "__SOURCE_TC__"
+                : document.getElementById("TCStart").value.trim();
+
+            if (tc === "" || tc === "0" || (!useSource && !validateStartTimecode(false, false))) tc = "00:00:00:00";
+
+            var rate = document.getElementById("TCFPS").value;
+
+            if (rate === "") {
+                rate = document.getElementById("Framerate").value;
+
+                if (rate === "custom") {
+                    rate = document.getElementById("FramerateCustom").value;
+                }
+
+                if (rate === "") rate = "__SOURCE_FPS__";
+            }
+
+            var position = document.getElementById("TCPosition").value || "mc";
+
+            var positions = {
+                tl: ["20", "20"],
+                tc: ["(w-text_w)/2", "20"],
+                tr: ["w-text_w-20", "20"],
+                ml: ["20", "(h-text_h)/2"],
+                mc: ["(w-text_w)/2", "(h-text_h)/2"],
+                mr: ["w-text_w-20", "(h-text_h)/2"],
+                bl: ["20", "h-text_h-20"],
+                bc: ["(w-text_w)/2", "h-text_h-20"],
+                br: ["w-text_w-20", "h-text_h-20"]
+            };
+
+            var xy = positions[position];
+            var font = resolveTimecodeFont();
+            var size = document.getElementById("TCSize").value;
+
+            if (size === "custom") {
+                var customPercent = normalizeTCSizeCustom();
+                size = "h/" + (100 / customPercent);
+            }
+
+            var bg = parseInt(document.getElementById("TCBackgroundOpacity").value, 10) / 100;
+            var fg = parseInt(document.getElementById("TCForegroundOpacity").value, 10) / 100;
+
+            tc = tc.replace(/:/g, "\\:");
+
+            var filter = "drawtext=";
+
+            if (font.value !== "") {
+                filter += font.option + "='" + escapeDrawtextValue(font.value) + "':";
+            }
+
+            return filter +
+                "timecode='" + tc + "'" +
+                ":timecode_rate=" + rate +
+                ":x=" + xy[0] +
+                ":y=" + xy[1] +
+                ":fontsize=" + size +
+                ":fontcolor=white@" + fg.toFixed(2) +
+                ":box=1" +
+                ":boxcolor=black@" + bg.toFixed(2) +
+                ":boxborderw=8";
+        }
+
+        function setTCPosition(value) {
+            document.getElementById("TCPosition").value = value;
+            updateCommand();
+        }
+
+        function restoreTCPosition() {
+            var value = document.getElementById("TCPosition").value || "mc";
+            var radios = document.getElementsByName("TCPositionRadio");
+
+            for (var i = 0; i < radios.length; i++) {
+                radios[i].checked = radios[i].value === value;
+            }
+        }
+
+        function closeHelpPopups(exceptId) {
+            var popups = document.getElementsByClassName("ffas-help-popup");
+
+            for (var i = 0; i < popups.length; i++) {
+                if (!exceptId || popups[i].id !== exceptId) {
+                    popups[i].style.display = "none";
+                }
+            }
+
+            if (!exceptId) {
+                var overlay = document.getElementById("FFASHelpOverlay");
+
+                if (overlay) {
+                    overlay.style.display = "none";
+                }
+            }
+        }
+
+        function getHelpOverlay() {
+            var overlay = document.getElementById("FFASHelpOverlay");
+
+            if (!overlay) {
+                overlay = document.createElement("div");
+                overlay.id = "FFASHelpOverlay";
+                overlay.className = "ffas-help-overlay";
+                overlay.onclick = function () {
+                    closeHelpPopups();
+                };
+                document.body.appendChild(overlay);
+            }
+
+            return overlay;
+        }
+
+        function toggleHelpPopup(popupId, evt) {
+            evt = evt || window.event;
+
+            if (evt.stopPropagation) {
+                evt.stopPropagation();
+            }
+
+            evt.cancelBubble = true;
+
+            var popup = document.getElementById(popupId);
+
+            if (!popup) {
+                return false;
+            }
+
+            var shouldShow = popup.style.display !== "block";
+            closeHelpPopups(popupId);
+
+            if (shouldShow) {
+                getHelpOverlay().style.display = "block";
+                popup.style.display = "block";
+            } else {
+                closeHelpPopups();
+            }
+
+            return false;
+        }
+
+        var FFMPEG_DOC_BASE = "https://ffmpeg.org/";
+        var OPTION_HELP_ITEMS = [
+            { id: "FFmpegMode", title: "FFmpeg Engine", text: "Choose FFAStrans internal FFmpeg or an external executable. FFmpeg options are applied to the next input or output file, so the selected binary must support the command we build.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Description" },
+            { id: "FFmpegPath", title: "FFmpeg Path", text: "External FFmpeg can be a path to ffmpeg.exe, a folder, or an FFAStrans variable that expands before execution. ffprobe.exe is expected beside ffmpeg.exe.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Synopsis" },
+            { id: "Format", title: "Container Format", text: "The container muxer controls how encoded streams are written. MP4 and MOV rebuild codec choices to keep the command container-aware.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
+            { id: "VideoCodec", title: "Video Codec", text: "Sets the video encoder with -c:v. Copy mode stream-copies packets without decoding. No Video writes -vn and creates an audio-only file when the container and source audio allow it.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
+            { id: "RateControl", title: "Rate Control", text: "Controls bitrate or quality strategy. ABR uses -b:v, 2-pass uses -pass, CRF uses quality-based encoding, and QP/CQ uses encoder quantizer control.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
+            { id: "VideoBitrate", title: "Video Bitrate", text: "Sets the target video bitrate with -b:v. This is most useful with ABR and 2-pass ABR modes.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
+            { id: "CRF", targetId: "CRFControl", title: "Quality Value", text: "Quality mode is encoder-specific. For CRF, lower values are usually higher quality and larger files; for QP/CQ it maps to quantizer-style control.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Preset", title: "Encoding Preset", text: "Encoder presets normally trade speed for compression efficiency. Slower presets may improve compression but take more time.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Profile", title: "Profile", text: "Constrains the encoded bitstream to a codec profile for compatibility with decoders and playback devices. For ProRes this selects Proxy, LT, Standard, HQ, 4444, or 4444 XQ.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Level", title: "Level", text: "Constrains codec limits such as resolution, bitrate, and reference frames. Use Auto unless a playback target requires a specific level.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Tune", title: "Tune", text: "Encoder tuning changes compression decisions for content types such as film, animation, grain, still images, or low latency.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Framerate", targetId: "FramerateControls", title: "Framerate", text: "As an output option, -r duplicates or drops frames before encoding to reach the selected output frame rate.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
+            { id: "FramerateCustom", title: "Custom Framerate", text: "Accepts an integer, decimal, rational value such as 24000/1001, or an FFAStrans variable that expands at execution.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Video-Options" },
+            { id: "ColorMode", title: "Color Mode", text: "Sets -pix_fmt. FFmpeg may choose the nearest encoder-supported pixel format if the requested one is unavailable.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
+            { id: "DisplayMode", title: "Display Mode", text: "Controls progressive or interlaced encoding flags. Use interlaced modes only when the source and delivery target require it.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
+            { id: "KeyframeInt", title: "Keyframe Interval", text: "Sets GOP/keyframe distance with -g. Smaller GOPs seek faster but can reduce compression efficiency.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "MinGOP", title: "Min GOP Size", text: "Sets the minimum keyframe interval with -keyint_min when the encoder supports it.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "FramePacking", title: "Frame-Packing", text: "Writes frame-packing encoder private options for supported x264/x265 encoders. It is hidden for codecs that do not support it.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Scale", title: "Scale", text: "Uses the scale video filter to resize decoded frames before encoding. This is preferred over the -s shortcut when filter order matters.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#scale" },
+            { id: "ScaleWidth", title: "Custom Width", text: "Custom scale width accepts a positive number, -1 to preserve aspect ratio, blank, or an FFAStrans variable.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#scale" },
+            { id: "ScaleHeight", title: "Custom Height", text: "Custom scale height accepts a positive number, -1 to preserve aspect ratio, blank, or an FFAStrans variable.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#scale" },
+            { id: "WatermarkEnable", title: "Enable Watermark", text: "Adds a second image input and uses a complex filtergraph with overlay. Filters require video decoding and re-encoding, so Copy and No Video cannot use this.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#overlay" },
+            { id: "WatermarkPath", title: "Image Path", text: "The watermark image becomes input 1. Use a common FFmpeg-readable image file or an FFAStrans variable path.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Synopsis" },
+            { id: "WatermarkPosition", targetId: "WatermarkPositionGrid", title: "Watermark Position", text: "Maps to overlay x/y expressions, placing the watermark against a corner, edge center, or the frame center.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#overlay" },
+            { id: "WatermarkXOffset", title: "X Offset", text: "Horizontal overlay offset from the selected grid point. Accepts a number or FFAStrans variable.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#overlay" },
+            { id: "WatermarkYOffset", title: "Y Offset", text: "Vertical overlay offset from the selected grid point. Accepts a number or FFAStrans variable.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#overlay" },
+            { id: "WatermarkResize", title: "Watermark Resize", text: "Uses scale2ref to resize the watermark relative to the filtered source video before overlay.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#scale2ref" },
+            { id: "WatermarkOpacity", targetId: "WatermarkOpacityValue", title: "Watermark Opacity", text: "Applies alpha with format=rgba and colorchannelmixer before overlaying the image.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#colorchannelmixer" },
+            { id: "TCEnable", title: "Enable Timecode", text: "Adds a drawtext filter configured for timecode burn-in.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCStart", title: "Start Timecode", text: "The drawtext timecode value used when source timecode is not selected. Accepts HH:MM:SS:FF or HH:MM:SS;FF.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCSourceFallback", title: "No Source Timecode", text: "When ffprobe cannot find source timecode, the processor can start at zero or use the Start Timecode value above.", url: FFMPEG_DOC_BASE + "ffprobe.html" },
+            { id: "TCFPS", title: "Timecode FPS", text: "Sets drawtext timecode_rate. If empty, the processor uses the selected framerate or probes the source during execution.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCFont", title: "Timecode Font", text: "drawtext can use FFmpeg default font handling, a font file, or a font name depending on the selected mode.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCFontCustom", title: "Custom Timecode Font", text: "Use an installed font name or a full path to a font file. Full paths should include the font extension.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCPosition", targetId: "TCPositionGrid", title: "Timecode Position", text: "Maps to drawtext x/y expressions for text placement on the frame.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCSize", title: "Timecode Size", text: "Controls drawtext fontsize using frame-height expressions or a custom percent.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCBackgroundOpacity", targetId: "TCBackgroundValue", title: "Background Opacity", text: "Controls drawtext boxcolor alpha for the timecode background box.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "TCForegroundOpacity", targetId: "TCForegroundValue", title: "Foreground Opacity", text: "Controls drawtext fontcolor alpha for the timecode text.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#drawtext" },
+            { id: "AudioCodec", title: "Audio Codec", text: "Sets the audio encoder with -c:a, copies audio with streamcopy, or disables audio with -an.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Audio-Options" },
+            { id: "AudioSampleRate", title: "Sample Rate", text: "Sets output audio sampling frequency with -ar when audio is encoded.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Audio-Options" },
+            { id: "AudioBitrate", title: "Audio Bitrate", text: "Sets target encoded audio bitrate with -b:a for codecs that use bitrate control.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Audio-Options" },
+            { id: "AudioChannels", title: "Audio Channels", text: "Sets output audio channel count with -ac when audio is encoded.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Audio-Options" },
+            { id: "AudioTrackName", title: "Track Name", text: "Writes stream title metadata for the first audio stream.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "AudioDelay", title: "Audio Delay", text: "For encoded audio, uses the adelay filter to delay samples by milliseconds.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#adelay" },
+            { id: "AudioLanguage", title: "Language", text: "Writes stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "Threads", title: "Threads", text: "Sets FFmpeg thread count when supported. Leaving it empty or zero lets FFmpeg decide.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
+            { id: "HWAccel", title: "Hardware Acceleration", text: "Adds -hwaccel for supported decoding acceleration. Actual support depends on the local FFmpeg build and hardware.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
+            { id: "OpenGOP", title: "Open GOP", text: "Encoder private setting for supported x264/x265 encoders. Default emits no option.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
+            { id: "Faststart", title: "Faststart", text: "For MP4/MOV, moves metadata for faster progressive playback by adding -movflags +faststart.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
+            { id: "Brand", title: "Brand", text: "Sets the MP4 major brand with -brand when a non-default value is selected.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#MOV_002fMPEG_002d4_002fISOMBFF-muxers" },
+            { id: "CodecID", title: "Codec ID", text: "Forces the video tag/fourcc with -tag:v for compatible MP4 codecs.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
+            { id: "ForceCFR", title: "Force CFR", text: "Adds -vsync cfr to force constant frame-rate timestamp generation.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
+            { id: "ExtraArgs", title: "Extra Arguments", text: "Appends raw FFmpeg arguments. FFmpeg options are order-sensitive, so only add options valid for this output.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Options" },
+            { id: "CommandVisibility", title: "Generated Command", text: "Shows or hides this node's command preview. It is UI-only and does not add an FFmpeg argument." },
+            { id: "Theme", title: "Theme", text: "Changes only the editor appearance. It is UI-only and does not add an FFmpeg argument." },
+            { id: "PresetJson", targetId: "PresetJsonImportBtn", title: "Preset JSON", text: "Exports and imports this node's saved UI settings as JSON. This is UI preset data, not an FFmpeg command option." }
+        ];
+
+        function findOptionHelpLabel(el) {
+            var node = el;
+
+            while (node) {
+                node = node.previousSibling;
+
+                if (node && node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === "label") {
+                    return node;
+                }
+            }
+
+            if (el.id) {
+                var labels = document.getElementsByTagName("label");
+
+                for (var i = 0; i < labels.length; i++) {
+                    if (labels[i].htmlFor === el.id) {
+                        return labels[i];
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function getRelatedButtons(el) {
+            var buttons = [];
+
+            if (!el || !el.id || !el.parentNode) {
+                return buttons;
+            }
+
+            var candidates = el.parentNode.getElementsByTagName("input");
+
+            for (var i = 0; i < candidates.length; i++) {
+                if (candidates[i].getAttribute("data-parent") === el.id) {
+                    buttons.push(candidates[i]);
+                }
+            }
+
+            return buttons;
+        }
+
+        function compactInputForHelp(el, buttons) {
+            if (!el || el.tagName.toLowerCase() !== "input" || !buttons || buttons.length === 0) {
+                return;
+            }
+
+            var type = el.type ? el.type.toLowerCase() : "";
+
+            if (type !== "text" && type !== "") {
+                return;
+            }
+
+            if (buttons.length > 1) {
+                el.style.width = "198px";
+            } else {
+                el.style.width = "228px";
+            }
+        }
+
+        function findOptionHelpTarget(el, item) {
+            if (item.targetId) {
+                return document.getElementById(item.targetId);
+            }
+
+            var buttons = getRelatedButtons(el);
+
+            if (buttons.length > 0) {
+                compactInputForHelp(el, buttons);
+                return buttons[buttons.length - 1];
+            }
+
+            return el;
+        }
+
+        function insertAfterNode(newNode, target) {
+            if (!target || !target.parentNode) {
+                return;
+            }
+
+            if (target.nextSibling) {
+                target.parentNode.insertBefore(newNode, target.nextSibling);
+            } else {
+                target.parentNode.appendChild(newNode);
+            }
+        }
+
+        function isOptionHelpHidden(el, target) {
+            return (el && el.style && el.style.display === "none") ||
+                (target && target.style && target.style.display === "none");
+        }
+
+        function copyHelpUrl(url, hint) {
+            var copied = false;
+
+            try {
+                if (window.clipboardData && window.clipboardData.setData) {
+                    copied = window.clipboardData.setData("Text", url);
+                } else if (window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) {
+                    window.navigator.clipboard.writeText(url);
+                    copied = true;
+                }
+            } catch (e) {
+                copied = false;
+            }
+
+            if (hint) {
+                hint.innerHTML = copied ? "Link copied to clipboard." : "If the browser blocks opening, copy this link: " + url;
+            }
+        }
+
+        function createOptionHelp(item) {
+            var el = document.getElementById(item.id);
+
+            if (!el || document.getElementById("OptionHelp_" + item.id)) {
+                return;
+            }
+
+            var target = item.labelId ? document.getElementById(item.labelId) : findOptionHelpTarget(el, item);
+            var label = item.labelId ? target : findOptionHelpLabel(el);
+
+            if (!target) {
+                return;
+            }
+
+            var wrap = document.createElement("span");
+            var button = document.createElement("span");
+            var popup = document.createElement("span");
+            var close = document.createElement("span");
+            var title = document.createElement("span");
+            var text = document.createElement("span");
+            var link = document.createElement("a");
+            var hint = document.createElement("span");
+
+            wrap.className = "ffas-help-wrap";
+            wrap.id = "OptionHelpWrap_" + item.id;
+            wrap.style.display = isOptionHelpHidden(el, target) ? "none" : "inline-block";
+            button.className = "ffas-help-button";
+            button.innerHTML = "?";
+            button.onclick = function () {
+                return toggleHelpPopup("OptionHelp_" + item.id, window.event);
+            };
+
+            popup.className = "ffas-help-popup";
+            popup.id = "OptionHelp_" + item.id;
+            popup.onclick = function () {
+                window.event.cancelBubble = true;
+            };
+
+            close.className = "ffas-help-close";
+            close.innerHTML = "x";
+            close.onclick = function () {
+                closeHelpPopups();
+                window.event.cancelBubble = true;
+            };
+
+            title.className = "ffas-help-title";
+            title.innerHTML = item.title;
+            text.innerHTML = item.text;
+
+            hint.className = "ffas-help-link-hint";
+
+            popup.appendChild(close);
+            popup.appendChild(title);
+            popup.appendChild(text);
+
+            if (item.url) {
+                link.className = "ffas-help-link";
+                link.href = item.url;
+                link.target = "_blank";
+                link.innerHTML = "Open FFmpeg docs";
+                link.onclick = function (evt) {
+                    evt = evt || window.event;
+                    copyHelpUrl(item.url, hint);
+
+                    if (evt) {
+                        evt.cancelBubble = true;
+                    }
+                };
+
+                popup.appendChild(document.createElement("br"));
+                popup.appendChild(link);
+                popup.appendChild(document.createElement("br"));
+                popup.appendChild(hint);
+            }
+
+            wrap.appendChild(button);
+            wrap.appendChild(popup);
+
+            if (item.labelId && label) {
+                label.appendChild(wrap);
+            } else {
+                insertAfterNode(wrap, target);
+            }
+        }
+
+        function initOptionHelp() {
+            for (var i = 0; i < OPTION_HELP_ITEMS.length; i++) {
+                createOptionHelp(OPTION_HELP_ITEMS[i]);
+
+                var item = OPTION_HELP_ITEMS[i];
+                var wrap = document.getElementById("OptionHelpWrap_" + item.id);
+                var el = document.getElementById(item.id);
+                var target = item.labelId ? document.getElementById(item.labelId) : findOptionHelpTarget(el, item);
+
+                if (wrap) {
+                    wrap.style.display = isOptionHelpHidden(el, target) ? "none" : "inline-block";
+                }
+            }
+        }
+
+        function syncTCOpacity(slider, labelId) {
+            var label = document.getElementById(labelId);
+
+            if (label) {
+                label.innerText = slider.value;
+            }
+
+            updateCommand();
+        }
+
+
+        // window.onload = updateCommand;
+        // Replace `window.onload = updateCommand;` with this:
+        window.onload = function () {
+
+            var titleEl = document.getElementById("title");
+
+            if (titleEl) {
+                titleEl.innerHTML =
+                    '<span style="font-size:16px;font-weight:bold;">' +
+                    'FFmpeg Encoder Preview' +
+                    '</span>';
+            }
+
+            toggleFramerateCustom();
+            toggleResolutionCustom();
+            toggleFFmpegMode();
+            updateCodecs();
+            populateTCFonts();
+            toggleTCSizeCustom();
+            toggleTCSourceFallback();
+            toggleWatermarkOptions();
+            toggleAudioOptions();
+            toggleGeneratedCommand();
+            applyTheme();
+            initOptionHelp();
+            sortAudioLanguages();
+            updateCodecIdOptions();
+            captureDefaultValues();
+            updateCommand();
+
+
+
+            document.body.style.visibility = "visible";
+
+        };
+
+        // Prevent right click context menu
+        document.oncontextmenu = function (e) {
+            e = e || window.event;
+
+            var el = e.target || e.srcElement;
+            var tag = el.tagName ? el.tagName.toLowerCase() : "";
+            var type = el.type ? el.type.toLowerCase() : "";
+
+            var editableInput =
+                tag === "textarea" ||
+                tag === "select" ||
+                el.isContentEditable ||
+                (tag === "input" &&
+                    type !== "range" &&
+                    type !== "checkbox" &&
+                    type !== "radio" &&
+                    type !== "button" &&
+                    type !== "submit");
+
+            if (editableInput) return true;
+
+            if (e.preventDefault) e.preventDefault();
+            e.returnValue = false;
+            return false;
+        };
+
+        document.onclick = function () {
+            closeHelpPopups();
+        };
+
+
+
+    </script>
+</head>
+
+<body class="theme-original">
+    <div id="title"></div>
+    <div style="height:15px;visibility:hidden;"></div>
+
+    <hr>
+    <div class="tab">
+        <button id="btnGeneral" class="tablinks active" onclick="openTab('TabGeneral', 'btnGeneral')">General</button>
+        <button id="btnVideo" class="tablinks" onclick="openTab('TabVideo', 'btnVideo')">Video</button>
+        <button id="btnFilters" class="tablinks" onclick="openTab('TabFilters', 'btnFilters')">Filters</button>
+        <button id="btnAudio" class="tablinks" onclick="openTab('TabAudio', 'btnAudio')">Audio</button>
+        <button id="btnAdvanced" class="tablinks" onclick="openTab('TabAdvanced', 'btnAdvanced')">Advanced</button>
+        <button id="btnOptions" class="tablinks tab-right" onclick="openTab('TabOptions', 'btnOptions')">Options</button>
+    </div>
+
+    <div id="TabGeneral" class="tabcontent" style="display: block;">
+        <div class="tab-panel-header">
+            <div class="section-title">General Settings</div>
+            <input type="button" class="tab-reset-button" value="Reset" onclick="return resetTab('TabGeneral')" />
+        </div>
+        <hr>
+        <label class="ffas-label-left">FFmpeg Engine: </label>
+        <select class="ffas-text-input" id="FFmpegMode" onchange="toggleFFmpegMode()" style="width: 270px;">
+            <option value="internal" selected>Internal FFmpeg</option>
+            <option value="external">External FFmpeg</option>
+        </select>
+        <input type="hidden" id="SourceFilePath" value="%s_source%" />
+        <input type="hidden" id="OutputFilePath" />
+        <br />
+
+        <label class="ffas-label-left">FFmpeg Path: </label>
+        <input class="ffas-text-input" id="FFmpegPath" oninput="validateFFmpegPathField(this)"
+            onchange="validateFFmpegPathField(this)" placeholder="Path to ffmpeg.exe or %s_var%" value="%s_ffmpegx64%" disabled
+            style="width:270px; box-sizing:border-box;" />
+
+        <span id="FFmpegPathStatus" style="margin-left:6px; font-family:sans-serif; font-size:12px;"></span>
+
+        <input width="2px" type="submit" value="<" name="open_vars" data-parent="FFmpegPath" data-user_vars_only="true"
+            id="FFmpegVarsBtn" />
+
+        <input style="width: 30px; padding: 0; font-weight: bold;" type="submit" value="..." name="open_filebrowser"
+            data-parent="FFmpegPath" id="FFmpegPathAfter" />
+
+        <div class="section-title">Container Settings</div>
+        <label class="ffas-label-left">Container Format: </label>
+
+        <select class="ffas-text-input" id="Format" onchange="updateCodecs()">
+            <option value="mp4" selected>MP4 (.mp4)</option>
+            <option value="mkv" disabled="disabled">Matroska (.mkv) - coming later</option>
+            <option value="mov">QuickTime (.mov)</option>
+            <option value="ts" disabled="disabled">MPEG-TS (.ts) - coming later</option>
+        </select>
+    </div>
+
+    <div id="TabVideo" class="tabcontent">
+        <div class="tab-panel-header">
+            <div class="section-title">Video Settings</div>
+            <input type="button" class="tab-reset-button" value="Reset" onclick="return resetTab('TabVideo')" />
+        </div>
+        <div class="form-grid">
+
+            <div>
+                <label class="ffas-label-left">Video Codec: </label>
+                <select class="ffas-text-input" id="VideoCodec" onchange="updateVideoCodec()">
+                    <option value="libx264" selected>MPEG-4 AVC / H.264</option>
+                    <option value="libx265">HEVC / H.265</option>
+                    <option value="prores_ks">Apple ProRes</option>
+                    <option value="copy">Copy (No Re-encode)</option>
+                </select><br />
+
+                <label class="ffas-label-left">Rate Control: </label>
+                <select class="ffas-text-input" id="RateControl" onchange="updateCommand()">
+                    <option value="abr" selected>ABR (Average Bitrate)</option>
+                    <option value="crf">CRF (Constant Quality)</option>
+                    <option value="2pass">2-Pass ABR</option>
+                    <option value="qp">CQ (Constant Quantizer)</option>
+                </select><br />
+
+                <div id="rc_bitrate_box">
+                    <label class="ffas-label-left">Bitrate: </label>
+                    <input type="text" class="ffas-text-input" id="VideoBitrate" onkeyup="updateCommand()"
+                        onchange="updateCommand()" value="1500k" />
+                </div>
+
+                <div id="rc_crf_box" style="display:none; margin-bottom:15px;">
+                    <label class="ffas-label-left" id="rc_label">CRF Value:</label>
+
+                    <div class="quality-slider-wrap" id="CRFControl">
+                        <div class="quality-slider-row">
+
+                            <input type="range" id="CRF" class="quality-slider" min="0" max="51" step="1" value="23"
+                                oninput="syncQualityValue(this.value)" onchange="syncQualityValue(this.value)" />
+
+                            <span id="CRFNumber" class="quality-number">23</span>
+                        </div>
+
+                        <div class="quality-slider-labels">
+                            <span id="QualityDescriptions">Higher quality</span>
+                            <span id="QualityDescription">High quality</span>
+                            <span id="QualityDescriptions">Smaller file</span>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="ffas-label-left">Encoding Preset: </label>
+                <select class="ffas-text-input" id="Preset" onchange="updateCommand()">
+                    <option value="" selected>Default</option>
+                    <option value="ultrafast">Ultrafast</option>
+                    <option value="superfast">Superfast</option>
+                    <option value="veryfast">Veryfast</option>
+                    <option value="faster">Faster</option>
+                    <option value="fast">Fast</option>
+                    <option value="medium">Medium</option>
+                    <option value="slow">Slow</option>
+                    <option value="slower">Slower</option>
+                    <option value="veryslow">Veryslow</option>
+                    <option value="placebo">Placebo</option>
+                </select><br />
+
+                <label class="ffas-label-left">Profile: </label>
+                <select class="ffas-text-input" id="Profile" onchange="updateCommand()">
+                    <option value="" selected>Default</option>
+                    <option value="baseline">Baseline</option>
+                    <option value="main">Main</option>
+                    <option value="high">High</option>
+                    <option value="high422">High 4:2:2</option>
+                    <option value="high444">High 4:4:4</option>
+                    <option value="high10">High 10</option>
+                    <option value="high422_10">High 4:2:2 10</option>
+                    <option value="high444_10">High 4:4:4 10</option>
+                </select><br />
+
+                <label class="ffas-label-left">Level: </label>
+                <select class="ffas-text-input" id="Level" onchange="updateCommand()">
+                    <option value="auto" selected>Auto</option>
+                    <option value="1">Level 1</option>
+                    <option value="1.1">Level 1.1</option>
+                    <option value="1.2">Level 1.2</option>
+                    <option value="1.3">Level 1.3</option>
+                    <option value="2">Level 2</option>
+                    <option value="2.1">Level 2.1</option>
+                    <option value="2.2">Level 2.2</option>
+                    <option value="3">Level 3</option>
+                    <option value="3.1">Level 3.1</option>
+                    <option value="3.2">Level 3.2</option>
+                    <option value="4">Level 4</option>
+                    <option value="4.1">Level 4.1</option>
+                    <option value="4.2">Level 4.2</option>
+                    <option value="5">Level 5</option>
+                    <option value="5.1">Level 5.1</option>
+                    <option value="5.2">Level 5.2</option>
+                    <option value="6">Level 6</option>
+                    <option value="6.1">Level 6.1</option>
+                    <option value="6.2">Level 6.2</option>
+                </select><br />
+
+                <label class="ffas-label-left">Tune: </label>
+                <select class="ffas-text-input" id="Tune" onchange="updateCommand()">
+                    <option value="" selected>Disabled</option>
+                    <option value="film">Film</option>
+                    <option value="animation">Animation</option>
+                    <option value="grain">Grain</option>
+                    <option value="stillimage">Stillimage</option>
+                    <option value="psnr">Psnr</option>
+                    <option value="ssim">Ssim</option>
+                    <option value="fastdecode">Fastdecode</option>
+                    <option value="zerolatency">Zerolatency</option>
+                    <option value="touhou">Touhou</option>
+                </select><br />
+            </div>
+
+            <div>
+                <label class="ffas-label-left">Framerate: </label>
+
+                <span class="framerate-controls" id="FramerateControls">
+                    <select class="ffas-text-input" id="Framerate" onchange="toggleFramerateCustom()">
+
+                        <option value="" selected>Keep original</option>
+                        <option value="24000/1001">23.976 fps</option>
+                        <option value="24">24 fps</option>
+                        <option value="25">25 fps</option>
+                        <option value="30000/1001">29.97 fps</option>
+                        <option value="30">30 fps</option>
+                        <option value="50">50 fps</option>
+                        <option value="60000/1001">59.94 fps</option>
+                        <option value="60">60 fps</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+
+                    <input type="text" class="ffas-text-input" id="FramerateCustom" style="display:none; width:220px;"
+                        onkeyup="validateFramerateCustom(true)" onchange="validateFramerateCustom(true)"
+                        placeholder="25, 24000/1001, or %s_var%" />
+
+                    <input width="2px" type="submit" value="<" name="open_vars" data-parent="FramerateCustom"
+                        data-user_vars_only="true" id="FramerateCustomVarsBtn" style="display:none;" />
+                </span>
+
+                <br />
+
+                <div id="ColorModeRow">
+                    <label class="ffas-label-left">Color Mode: </label>
+                    <select class="ffas-text-input" id="ColorMode" onchange="updateCommand()">
+                        <option value="">Keep Original</option>
+                    </select><br />
+                </div>
+
+                <label class="ffas-label-left">Display Mode: </label>
+                <select class="ffas-text-input" id="DisplayMode" onchange="updateCommand()">
+                    <option value="Progressive" selected>Progressive</option>
+                    <option value="Interlaced (TFF)">Interlaced (Top Field First)</option>
+                    <option value="Interlaced (BFF)">Interlaced (Bottom Field First)</option>
+                </select><br />
+
+                <label class="ffas-label-left">Keyframe Interval: </label>
+                <input type="text" class="ffas-text-input" id="KeyframeInt" onfocus="clearZeroDefault(this)"
+                    oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+                    value="0" placeholder="0, number, or %s_var%" />
+                <input width="2px" type="submit" value="<" name="open_vars" data-parent="KeyframeInt"
+                    data-user_vars_only="true" id="KeyframeIntVarsBtn" /><br />
+
+                <label class="ffas-label-left">Min GOP Size: </label>
+                <input type="text" class="ffas-text-input" id="MinGOP" onfocus="clearZeroDefault(this)"
+                    oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+                    value="0" placeholder="0, number, or %s_var%" />
+                <input width="2px" type="submit" value="<" name="open_vars" data-parent="MinGOP"
+                    data-user_vars_only="true" id="MinGOPVarsBtn" /><br />
+
+                <div id="FramePackingRow">
+                    <label class="ffas-label-left">Frame-Packing: </label>
+                    <select class="ffas-text-input" id="FramePacking" onchange="updateCommand()">
+                        <option value="none" selected>none</option>
+                        <option value="3">3 (Side-by-Side)</option>
+                        <option value="4">4 (Top-Bottom)</option>
+                    </select><br />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="TabFilters" class="tabcontent">
+        <div class="tab-panel-header">
+            <div class="section-title">Video Filters</div>
+            <input type="button" class="tab-reset-button" value="Reset" onclick="return resetTab('TabFilters')" />
+        </div>
+
+        <label class="ffas-label-left">Scale:</label>
+        <select class="ffas-text-input" id="Scale" onchange="toggleResolutionCustom()">
+            <option value="" selected>Keep original</option>
+            <option value="3840:2160">3840 × 2160 — 4K UHD</option>
+            <option value="2560:1440">2560 × 1440 — 1440p</option>
+            <option value="1920:1080">1920 × 1080 — Full HD</option>
+            <option value="1280:720">1280 × 720 — HD</option>
+            <option value="854:480">854 × 480 — 480p</option>
+            <option value="640:360">640 × 360 — 360p</option>
+            <option value="426:240">426 × 240 — 240p</option>
+            <option value="custom">Custom...</option>
+        </select>
+
+        <div id="ScaleCustomBox" style="display:none; margin-top:5px;">
+            <label class="ffas-label-left">Custom Width:</label>
+            <input type="text" class="ffas-text-input" id="ScaleWidth" onkeyup="validateScaleCustom(true)"
+                onchange="validateScaleCustom(true)" placeholder="Width, -1, blank, or %s_var%" />
+
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="ScaleWidth"
+                data-user_vars_only="true" id="ScaleWidthVarsBtn" />
+            <br />
+
+            <label class="ffas-label-left">Custom Height:</label>
+            <input type="text" class="ffas-text-input" id="ScaleHeight" onkeyup="validateScaleCustom(true)"
+                onchange="validateScaleCustom(true)" placeholder="Height, -1, blank, or %s_var%" />
+
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="ScaleHeight"
+                data-user_vars_only="true" id="ScaleHeightVarsBtn" />
+        </div>
+
+        <hr>
+        <div class="section-title">Watermark</div>
+
+        <label class="ffas-label-left">Enable Watermark:</label>
+        <input type="checkbox" id="WatermarkEnable" onchange="toggleWatermarkOptions()" />
+        <br>
+
+        <div id="WatermarkCopyNotice" class="ffas-field-hint" style="display:none;">
+            Watermark requires video re-encoding and is ignored when Video Codec is Copy.
+        </div>
+
+        <div id="WatermarkSettings" style="display:none;">
+            <label class="ffas-label-left">Image path:</label>
+            <input type="text" class="ffas-text-input" id="WatermarkPath" onkeyup="validateWatermarkPath(true)"
+                onchange="validateWatermarkPath(true)" placeholder="PNG, JPG, BMP, TIFF, TGA, GIF, WEBP, or %s_var%" />
+            <input width="2px" type="submit" value="..." name="open_filebrowser" data-parent="WatermarkPath"
+                data-filter="Images|*.png;*.jpg;*.jpeg;*.bmp;*.dib;*.tif;*.tiff;*.tga;*.gif;*.webp"
+                id="WatermarkPathBrowseBtn" />
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="WatermarkPath"
+                data-user_vars_only="true" id="WatermarkPathVarsBtn" />
+            <br>
+
+            <label class="ffas-label-left">Position:</label>
+            <input type="hidden" id="WatermarkPosition" value="br" />
+            <table class="tc-position" id="WatermarkPositionGrid">
+                <tr>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tl" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tc" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tr" onchange="setWatermarkPosition(this.value)"></td>
+                </tr>
+                <tr>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="ml" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="mc" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="mr" onchange="setWatermarkPosition(this.value)"></td>
+                </tr>
+                <tr>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="bl" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="bc" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="br" checked onchange="setWatermarkPosition(this.value)"></td>
+                </tr>
+            </table><br>
+
+            <label class="ffas-label-left">X Offset:</label>
+            <input type="text" class="ffas-text-input" id="WatermarkXOffset" onfocus="clearZeroDefault(this)"
+                oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+                value="10" placeholder="0, number, or %s_var%" />
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="WatermarkXOffset"
+                data-user_vars_only="true" id="WatermarkXOffsetVarsBtn" /><br>
+
+            <label class="ffas-label-left">Y Offset:</label>
+            <input type="text" class="ffas-text-input" id="WatermarkYOffset" onfocus="clearZeroDefault(this)"
+                oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+                value="10" placeholder="0, number, or %s_var%" />
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="WatermarkYOffset"
+                data-user_vars_only="true" id="WatermarkYOffsetVarsBtn" /><br>
+
+            <label class="ffas-label-left">Resize:</label>
+            <select class="ffas-text-input" id="WatermarkResize" onchange="updateCommand()">
+                <option value="none" selected>Original size</option>
+                <option value="fit-inside">Fit inside source</option>
+                <option value="fit-width">Fit source width</option>
+                <option value="fit-height">Fit source height</option>
+            </select><br>
+
+            <label class="ffas-label-left">Opacity:</label>
+            <input type="range" id="WatermarkOpacity" min="0" max="100" value="100"
+                oninput="syncWatermarkOpacity(); updateCommand();"
+                onchange="syncWatermarkOpacity(); updateCommand();"
+                onmousemove="syncWatermarkOpacity();" />
+            <span id="WatermarkOpacityValue">100</span><br>
+        </div>
+
+        <hr>
+        <div class="section-title">Timecode Burn-in</div>
+
+        <label class="ffas-label-left">Enable Timecode:</label>
+        <input type="checkbox" id="TCEnable" onchange="toggleTimecode(); updateCommand();" />
+        <br>
+
+        <div id="TCSettings" style="display:none;">
+            <label class="ffas-label-left">Start Timecode:</label>
+            <input class="ffas-text-input" id="TCStart" value="00:00:00:00"
+                onkeyup="validateStartTimecode(true,false)" onchange="validateStartTimecode(true,true)"
+                placeholder="00:00:00:00" style="width:260px;" />
+            <br>
+
+            <div class="ffas-checkbox-row" style="margin-left:144px;">
+                <input type="checkbox" id="TCUseSource" onchange="toggleTCSourceFallback()" />
+                <label for="TCUseSource" style="font-weight:normal;">
+                    Use original media start timecode
+                    <span class="ffas-help-wrap">
+                        <span class="ffas-help-button" onclick="return toggleHelpPopup('TCUseSourceHelp', window.event);">?</span>
+                        <span class="ffas-help-popup" id="TCUseSourceHelp" onclick="window.event.cancelBubble=true;">
+                            <span class="ffas-help-close" onclick="closeHelpPopups(); window.event.cancelBubble=true;">x</span>
+                            <span class="ffas-help-title">Original Media Timecode</span>
+                            At execution, FFprobe reads the source media timecode and uses it for burn-in. If no valid source timecode is found, the fallback below decides whether burn-in starts from 00:00:00:00 or from the Start Timecode field.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div id="TCSourceFallbackRow" style="display:none;">
+                <label class="ffas-label-left">If no source timecode:</label>
+                <select class="ffas-text-input" id="TCSourceFallback" onchange="updateCommand()">
+                    <option value="zero" selected>Start from 00:00:00:00</option>
+                    <option value="manual">Use Start Timecode value above</option>
+                </select><br>
+            </div>
+
+            <label class="ffas-label-left">Timecode FPS:</label>
+            <select class="ffas-text-input" id="TCFPS" onchange="updateCommand()">
+                <option value="" selected>Use selected/source framerate</option>
+                <option value="24000/1001">23.976</option>
+                <option value="24">24</option>
+                <option value="25">25</option>
+                <option value="30000/1001">29.97</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="60000/1001">59.94</option>
+                <option value="60">60</option>
+            </select><br>
+
+            <label class="ffas-label-left">Timecode Font:</label>
+            <select class="ffas-text-input" id="TCFont" onchange="toggleTCFontCustom()">
+                <option value="default" selected>Default</option>
+            </select>
+            <span id="TCFontCustomBox" style="display:none;">
+                <input type="text" class="ffas-text-input" id="TCFontCustom" onkeyup="updateCommand()"
+                    onchange="updateCommand()" placeholder="Font name or full path" style="width:220px;" />
+            </span><br>
+
+            <label class="ffas-label-left">Position:</label>
+            <input type="hidden" id="TCPosition" value="mc" />
+            <table class="tc-position" id="TCPositionGrid">
+                <tr>
+                    <td><input type="radio" name="TCPositionRadio" value="tl" onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="tc" onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="tr" onchange="setTCPosition(this.value)"></td>
+                </tr>
+                <tr>
+                    <td><input type="radio" name="TCPositionRadio" value="ml" onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="mc" checked
+                            onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="mr" onchange="setTCPosition(this.value)"></td>
+                </tr>
+                <tr>
+                    <td><input type="radio" name="TCPositionRadio" value="bl" onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="bc" onchange="setTCPosition(this.value)"></td>
+                    <td><input type="radio" name="TCPositionRadio" value="br" onchange="setTCPosition(this.value)"></td>
+                </tr>
+            </table><br>
+
+            <label class="ffas-label-left">Timecode Size:</label>
+            <select class="ffas-text-input" id="TCSize" onchange="toggleTCSizeCustom()">
+                <option value="h/36">Small</option>
+                <option value="h/24" selected>Medium</option>
+                <option value="h/18">Large</option>
+                <option value="custom">Custom</option>
+            </select>
+
+            <span id="TCSizeCustomBox" class="tc-size-custom" style="display:none;">
+                <input type="button" value="-" onclick="return adjustTCSizeCustom(-1)" />
+                <input type="text" id="TCSizeCustom" value="4" readonly="readonly" />
+                <input type="button" value="+" onclick="return adjustTCSizeCustom(1)" />
+                <span>%</span>
+            </span><br>
+
+            <label class="ffas-label-left">Background opacity:</label>
+            <input type="range" id="TCBackgroundOpacity" min="0" max="100" value="70"
+                oninput="syncTCOpacity(this,'TCBackgroundValue')" onchange="syncTCOpacity(this,'TCBackgroundValue')"
+                onmousemove="syncTCOpacity(this,'TCBackgroundValue')" />
+
+            <span id="TCBackgroundValue">70</span><br>
+
+            <label class="ffas-label-left">Foreground opacity:</label>
+            <input type="range" id="TCForegroundOpacity" min="0" max="100" value="100"
+                oninput="syncTCOpacity(this,'TCForegroundValue')" onchange="syncTCOpacity(this,'TCForegroundValue')"
+                onmousemove="syncTCOpacity(this,'TCForegroundValue')" />
+
+            <span id="TCForegroundValue">100</span>
+        </div>
+
+    </div>
+
+    <div id="TabAudio" class="tabcontent">
+        <div class="tab-panel-header">
+            <div class="section-title">Audio Settings</div>
+            <input type="button" class="tab-reset-button" value="Reset" onclick="return resetTab('TabAudio')" />
+        </div>
+
+        <label class="ffas-label-left">Audio Codec: </label>
+        <select class="ffas-text-input" id="AudioCodec" onchange="toggleAudioOptions()">
+            <option value="aac" selected>AAC</option>
+            <option value="libfdk_aac">AAC (libfdk_aac external FFmpeg)</option>
+            <option value="libmp3lame">MP3</option>
+            <option value="ac3">AC-3</option>
+            <option value="eac3">E-AC-3</option>
+            <option value="alac">ALAC</option>
+            <option value="copy">Copy (No Re-encode)</option>
+            <option value="none">No Audio</option>
+        </select><br />
+
+
+        <div id="AudioOptions">
+
+            <label class="ffas-label-left">Sample Rate: </label>
+            <select class="ffas-text-input" id="AudioSampleRate" onchange="updateCommand()">
+                <option value="">Default</option>
+                <option value="32000">32 kHz</option>
+                <option value="44100">44.1 kHz</option>
+                <option value="48000">48 kHz</option>
+                <option value="96000">96 kHz</option>
+            </select><br />
+
+            <div id="AudioBitrateRow">
+                <label class="ffas-label-left">Audio Bitrate: </label>
+                <select class="ffas-text-input" id="AudioBitrate" onchange="updateCommand()">
+                    <option value="8k">8 kbps</option>
+                    <option value="16k">16 kbps</option>
+                    <option value="24k">24 kbps</option>
+                    <option value="32k">32 kbps</option>
+                    <option value="40k">40 kbps</option>
+                    <option value="48k">48 kbps</option>
+                    <option value="56k">56 kbps</option>
+                    <option value="64k">64 kbps</option>
+                    <option value="80k">80 kbps</option>
+                    <option value="96k">96 kbps</option>
+                    <option value="112k">112 kbps</option>
+                    <option value="128k" selected>128 kbps</option>
+                    <option value="160k">160 kbps</option>
+                    <option value="192k">192 kbps</option>
+                    <option value="224k">224 kbps</option>
+                    <option value="256k">256 kbps</option>
+                    <option value="320k">320 kbps</option>
+                </select><br />
+            </div>
+
+            <label class="ffas-label-left">Audio Channels: </label>
+            <select class="ffas-text-input" id="AudioChannels" onchange="updateCommand()">
+                <option value="">Default</option>
+                <option value="2">2 (Stereo)</option>
+                <option value="6">6 (5.1 Surround)</option>
+            </select><br />
+
+            <label class="ffas-label-left">Track Name: </label>
+            <input type="text" class="ffas-text-input" id="AudioTrackName" onkeyup="updateCommand()"
+                onchange="updateCommand()" placeholder="Title or %s_var%" />
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="AudioTrackName"
+                data-user_vars_only="true" id="AudioTrackNameVarsBtn" /><br />
+
+            <label class="ffas-label-left">Delay ms: </label>
+            <input type="text" class="ffas-text-input" id="AudioDelay" value="0" onfocus="clearZeroDefault(this)"
+                oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+                placeholder="0, milliseconds, or %s_var%" />
+            <input width="2px" type="submit" value="<" name="open_vars" data-parent="AudioDelay"
+                data-user_vars_only="true" id="AudioDelayVarsBtn" /><br />
+
+            <label class="ffas-label-left">Language: </label>
+            <select class="ffas-text-input" id="AudioLanguage" onchange="updateCommand()">
+                <option value="none" selected>none</option>
+                <option value="aar">Afar</option>
+                <option value="abk">Abkhazian</option>
+                <option value="afr">Afrikaans</option>
+                <option value="aka">Akan</option>
+                <option value="alb">Albanian</option>
+                <option value="amh">Amharic</option>
+                <option value="ara">Arabic</option>
+                <option value="arg">Aragonese</option>
+                <option value="arm">Armenian</option>
+                <option value="asm">Assamese</option>
+                <option value="ava">Avaric</option>
+                <option value="ave">Avestan</option>
+                <option value="aym">Aymara</option>
+                <option value="aze">Azerbaijani</option>
+                <option value="bak">Bashkir</option>
+                <option value="bam">Bambara</option>
+                <option value="baq">Basque</option>
+                <option value="bel">Belarusian</option>
+                <option value="ben">Bengali</option>
+                <option value="bih">Bihari</option>
+                <option value="bis">Bislama</option>
+                <option value="bos">Bosnian</option>
+                <option value="bre">Breton</option>
+                <option value="bul">Bulgarian</option>
+                <option value="bur">Burmese</option>
+                <option value="cat">Catalan</option>
+                <option value="cha">Chamorro</option>
+                <option value="che">Chechen</option>
+                <option value="chi">Chinese</option>
+                <option value="chu">Church Slavic</option>
+                <option value="chv">Chuvash</option>
+                <option value="cor">Cornish</option>
+                <option value="cos">Corsican</option>
+                <option value="cre">Cree</option>
+                <option value="cze">Czech</option>
+                <option value="dan">Danish</option>
+                <option value="div">Divehi</option>
+                <option value="dut">Dutch</option>
+                <option value="eng">English</option>
+                <option value="epo">Esperanto</option>
+                <option value="est">Estonian</option>
+                <option value="ewe">Ewe</option>
+                <option value="fao">Faroese</option>
+                <option value="fij">Fijian</option>
+                <option value="fin">Finnish</option>
+                <option value="fre">French</option>
+                <option value="fry">Western Frisian</option>
+                <option value="ful">Fulah</option>
+                <option value="geo">Georgian</option>
+                <option value="ger">German</option>
+                <option value="gla">Gaelic</option>
+                <option value="gle">Irish</option>
+                <option value="glg">Galician</option>
+                <option value="glv">Manx</option>
+                <option value="gre">Greek</option>
+                <option value="grn">Guarani</option>
+                <option value="guj">Gujarati</option>
+                <option value="hat">Haitian</option>
+                <option value="hau">Hausa</option>
+                <option value="heb">Hebrew</option>
+                <option value="her">Herero</option>
+                <option value="hin">Hindi</option>
+                <option value="hmo">Hiri Motu</option>
+                <option value="hrv">Croatian</option>
+                <option value="hun">Hungarian</option>
+                <option value="ibo">Igbo</option>
+                <option value="ice">Icelandic</option>
+                <option value="ido">Ido</option>
+                <option value="iii">Sichuan Yi</option>
+                <option value="iku">Inuktitut</option>
+                <option value="ile">Interlingue</option>
+                <option value="ina">Interlingua</option>
+                <option value="ind">Indonesian</option>
+                <option value="ipk">Inupiaq</option>
+                <option value="ita">Italian</option>
+                <option value="jav">Javanese</option>
+                <option value="jpn">Japanese</option>
+                <option value="kal">Kalaallisut</option>
+                <option value="kan">Kannada</option>
+                <option value="kas">Kashmiri</option>
+                <option value="kau">Kanuri</option>
+                <option value="kaz">Kazakh</option>
+                <option value="khm">Central Khmer</option>
+                <option value="kik">Kikuyu</option>
+                <option value="kin">Kinyarwanda</option>
+                <option value="kir">Kirghiz</option>
+                <option value="kom">Komi</option>
+                <option value="kon">Kongo</option>
+                <option value="kor">Korean</option>
+                <option value="kua">Kuanyama</option>
+                <option value="kur">Kurdish</option>
+                <option value="lao">Lao</option>
+                <option value="lat">Latin</option>
+                <option value="lav">Latvian</option>
+                <option value="lim">Limburgan</option>
+                <option value="lin">Lingala</option>
+                <option value="lit">Lithuanian</option>
+                <option value="ltz">Luxembourgish</option>
+                <option value="lub">Luba-Katanga</option>
+                <option value="lug">Ganda</option>
+                <option value="mac">Macedonian</option>
+                <option value="mah">Marshallese</option>
+                <option value="mal">Malayalam</option>
+                <option value="mao">Maori</option>
+                <option value="mar">Marathi</option>
+                <option value="may">Malay</option>
+                <option value="mlg">Malagasy</option>
+                <option value="mlt">Maltese</option>
+                <option value="mon">Mongolian</option>
+                <option value="nau">Nauru</option>
+                <option value="nav">Navajo</option>
+                <option value="nbl">South Ndebele</option>
+                <option value="nde">North Ndebele</option>
+                <option value="ndo">Ndonga</option>
+                <option value="nep">Nepali</option>
+                <option value="nno">Norwegian Nynorsk</option>
+                <option value="nob">Norwegian Bokmal</option>
+                <option value="nor">Norwegian</option>
+                <option value="nya">Chichewa</option>
+                <option value="oci">Occitan</option>
+                <option value="oji">Ojibwa</option>
+                <option value="ori">Oriya</option>
+                <option value="orm">Oromo</option>
+                <option value="oss">Ossetian</option>
+                <option value="pan">Panjabi</option>
+                <option value="per">Persian</option>
+                <option value="pli">Pali</option>
+                <option value="pol">Polish</option>
+                <option value="por">Portuguese</option>
+                <option value="pus">Pushto</option>
+                <option value="que">Quechua</option>
+                <option value="roh">Romansh</option>
+                <option value="rum">Romanian</option>
+                <option value="run">Rundi</option>
+                <option value="rus">Russian</option>
+                <option value="sag">Sango</option>
+                <option value="san">Sanskrit</option>
+                <option value="sin">Sinhala</option>
+                <option value="slo">Slovak</option>
+                <option value="slv">Slovenian</option>
+                <option value="sme">Northern Sami</option>
+                <option value="smo">Samoan</option>
+                <option value="sna">Shona</option>
+                <option value="snd">Sindhi</option>
+                <option value="som">Somali</option>
+                <option value="sot">Southern Sotho</option>
+                <option value="spa">Spanish</option>
+                <option value="srd">Sardinian</option>
+                <option value="srp">Serbian</option>
+                <option value="ssw">Swati</option>
+                <option value="sun">Sundanese</option>
+                <option value="swa">Swahili</option>
+                <option value="swe">Swedish</option>
+                <option value="tah">Tahitian</option>
+                <option value="tam">Tamil</option>
+                <option value="tat">Tatar</option>
+                <option value="tel">Telugu</option>
+                <option value="tgk">Tajik</option>
+                <option value="tgl">Tagalog</option>
+                <option value="tha">Thai</option>
+                <option value="tib">Tibetan</option>
+                <option value="tir">Tigrinya</option>
+                <option value="ton">Tonga</option>
+                <option value="tsn">Tswana</option>
+                <option value="tso">Tsonga</option>
+                <option value="tuk">Turkmen</option>
+                <option value="tur">Turkish</option>
+                <option value="twi">Twi</option>
+                <option value="uig">Uighur</option>
+                <option value="ukr">Ukrainian</option>
+                <option value="urd">Urdu</option>
+                <option value="uzb">Uzbek</option>
+                <option value="ven">Venda</option>
+                <option value="vie">Vietnamese</option>
+                <option value="vol">Volapuk</option>
+                <option value="wel">Welsh</option>
+                <option value="wln">Walloon</option>
+                <option value="wol">Wolof</option>
+                <option value="xho">Xhosa</option>
+                <option value="yid">Yiddish</option>
+                <option value="yor">Yoruba</option>
+                <option value="zha">Zhuang</option>
+                <option value="zul">Zulu</option>
+            </select><br />
+        </div>
+    </div>
+
+    <div id="TabAdvanced" class="tabcontent">
+        <div class="tab-panel-header">
+            <div class="section-title">Advanced Control</div>
+            <input type="button" class="tab-reset-button" value="Reset" onclick="return resetTab('TabAdvanced')" />
+        </div>
+
+        <label class="ffas-label-left">Threads: </label>
+        <input type="text" class="ffas-text-input" id="Threads" onfocus="clearZeroDefault(this)"
+            oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
+            onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
+            value="0" placeholder="0, number, or %s_var%" />
+        <input width="2px" type="submit" value="<" name="open_vars" data-parent="Threads"
+            data-user_vars_only="true" id="ThreadsVarsBtn" /><br />
+
+        <label class="ffas-label-left">Hardware Accel:</label>
+        <select class="ffas-text-input" id="HWAccel" onchange="updateCommand()">
+            <option value="" selected>Default</option>
+            <option value="auto">Auto Detect</option>
+            <option value="cuda">NVIDIA CUDA</option>
+            <option value="d3d12va">Direct3D 12 Video Acceleration</option>
+            <option value="d3d11va">Direct3D 11 Video Acceleration</option>
+            <option value="dxva2">DirectX Video Acceleration 2</option>
+            <option value="qsv">Intel Quick Sync Video</option>
+            <option value="vulkan">Vulkan</option>
+        </select><br />
+
+        <div id="OpenGOPRow">
+            <label class="ffas-label-left">Open GOP: </label>
+            <select class="ffas-text-input" id="OpenGOP" onchange="updateCommand()">
+                <option value="default" selected>Default</option>
+                <option value="on">On</option>
+            </select><br />
+        </div>
+
+        <div id="FaststartRow">
+            <label class="ffas-label-left">Faststart: </label>
+            <select class="ffas-text-input" id="Faststart" onchange="updateCommand()">
+                <option value="default" selected>Default</option>
+                <option value="on">On</option>
+            </select><br />
+        </div>
+
+        <div id="BrandRow">
+            <label class="ffas-label-left">Brand: </label>
+            <select class="ffas-text-input" id="Brand" onchange="updateCommand()">
+                <option value="default" selected>Default</option>
+                <option value="isom">isom (ISO Base Media)</option>
+                <option value="mp42">mp42 (MPEG-4 v2)</option>
+                <option value="iso6">iso6 (ISO Base Media v6)</option>
+                <option value="avc1">avc1 (AVC MP4)</option>
+            </select><br />
+        </div>
+
+        <div id="CodecIDRow">
+            <label class="ffas-label-left">Codec ID: </label>
+            <select class="ffas-text-input" id="CodecID" onchange="updateCommand()">
+                <option value="default" selected>Default</option>
+            </select><br />
+        </div>
+
+        <label class="ffas-label-left">Force CFR: </label>
+        <select class="ffas-text-input" id="ForceCFR" onchange="updateCommand()">
+            <option value="default" selected>Default</option>
+            <option value="on">On</option>
+        </select><br />
+
+        <label class="ffas-label-left">Extra Arguments: </label>
+        <input type="text" class="ffas-text-input" id="ExtraArgs" onkeyup="updateCommand()" onchange="updateCommand()"
+            placeholder="Additional FFmpeg arguments" /><br />
+    </div>
+
+    <div id="TabOptions" class="tabcontent">
+        <div class="tab-panel-header">
+            <div class="section-title">Display Options</div>
+            <input type="button" class="tab-reset-button tab-reset-all-button" value="Reset All" onclick="return resetAllSettings()" />
+        </div>
+
+        <label class="ffas-label-left">Generated Command:</label>
+        <select class="ffas-text-input" id="CommandVisibility" onchange="toggleGeneratedCommand()">
+            <option value="hidden" selected>Hidden</option>
+            <option value="shown">Shown</option>
+        </select><br />
+
+        <label class="ffas-label-left">Theme:</label>
+        <select class="ffas-text-input" id="Theme" onchange="applyTheme()">
+            <option value="original" selected>Original</option>
+            <option value="video">Video</option>
+            <option value="ffmpeg">FFmpeg</option>
+            <option value="monitoring">Monitoring</option>
+            <option value="dark">Dark</option>
+            <option value="contrast">High Contrast</option>
+        </select><br />
+
+        <hr>
+
+        <div class="section-title" id="PresetJsonTitle">Preset JSON</div>
+
+        <label class="ffas-label-left">Schema: </label>
+        <span>v1</span><br />
+
+        <div class="preset-json-row">
+            <textarea class="command-output preset-json-output" id="PresetJson"></textarea>
+            <div class="preset-json-actions" id="PresetJsonActions">
+                <input type="button" value="Export JSON File" onclick="return exportPresetJson()" />
+                <input type="button" value="Import JSON File" id="PresetJsonImportBtn" onclick="return importPresetJson()" />
+                <input type="file" id="PresetFileInput" accept=".json,application/json" style="display:none;"
+                    onchange="return importPresetJsonFromFile(this)" />
+            </div>
+        </div>
+
+    </div>
+
+    <div id="GeneratedCommandPanel" style="display:none;">
+        <hr class="red">
+        <div class="section-title">Generated Command</div>
+        <textarea class="command-output" id="GeneratedCommand" readonly="readonly"></textarea>
+    </div>
+
+</body>
+
+</html>

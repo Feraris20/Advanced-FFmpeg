@@ -1,0 +1,107 @@
+<style>
+html *
+{
+  font-family: Calibri;
+  font-size: 14px;
+}
+
+body
+{
+  line-height: 1.35;
+}
+
+b
+{
+  color: #021c6d;
+}
+</style>
+<body>
+<b>Advanced-FFmpeg</b><br/>
+This processor builds and runs an FFmpeg command from the UI settings. It is currently focused on MP4 output and can encode video, encode or copy audio, scale video, add an image watermark, burn in timecode, and pass the rendered file to the next FFAStrans node as the new source.
+
+<br/><br/><b>FFmpeg Engine</b>
+<br/><b>Internal FFmpeg</b> uses the FFAStrans FFmpeg variables.
+<br/><b>External FFmpeg</b> accepts a full path to ffmpeg.exe, an FFmpeg folder, or an FFAStrans variable such as %s_var%.
+<br/>FFAStrans variables are expanded during execution before the processor validates the path. ffprobe.exe is expected next to ffmpeg.exe.
+
+<br/><br/><b>Container Format</b>
+<br/><b>MP4</b> is the first-release target and is enabled.
+<br/>Other containers are visible as future options but disabled for now.
+
+<br/><br/><b>Video Codec</b>
+<br/>Choose the video encoder for the MP4 file. Hardware encoders require matching GPU support on the execution machine.
+<br/><b>Copy</b> does not re-encode video. The source video must already be valid for MP4. Filters such as Scale, Watermark, and Timecode Burn-in require re-encoding and are ignored with Copy.
+
+<br/><br/><b>Rate Control</b>
+<br/><b>ABR</b> uses the Video Bitrate field.
+<br/><b>2-Pass ABR</b> runs an analysis pass to NUL and a second pass to the final MP4.
+<br/><b>CRF</b> uses constant quality. Lower values are higher quality and larger files.
+<br/><b>QP/CQ</b> uses FFmpeg -qp for constant quantizer mode.
+<br/><b>Preset, Profile, Level, and Tune</b> are passed to encoders when selected. Defaults do not add extra command options.
+
+<br/><br/><b>Framerate and GOP</b>
+<br/><b>Framerate</b> can keep the source timing, use a preset, or use Custom.
+<br/><b>Custom Framerate</b> accepts values such as 25, 23.976, 24000/1001, or an FFAStrans variable such as %s_var%.
+<br/><b>Keyframe Interval</b> writes -g when a number or variable is supplied. Empty or 0 keeps FFmpeg default behavior.
+<br/><b>Min GOP Size</b> writes -keyint_min when a number or variable is supplied. Empty or 0 keeps FFmpeg default behavior.
+
+<br/><br/><b>Color and Display</b>
+<br/><b>Color Mode</b> is rebuilt for the selected codec. Some codecs require a defined pixel format, so Keep Original may be hidden.
+<br/><b>Display Mode</b> can keep progressive output or add interlace flags for top-field-first or bottom-field-first encoding.
+<br/><b>Frame-Packing</b> is shown only for compatible x264/x265 software encoders.
+
+<br/><br/><b>Scale</b>
+<br/><b>Scale</b> can keep the original size, use a preset size, or use Custom.
+<br/><b>Custom Width</b> and <b>Custom Height</b> accept positive numbers, -1, blank values, or FFAStrans variables.
+<br/>If only one custom dimension is provided, the other side becomes -1 so FFmpeg keeps the aspect ratio.
+
+<br/><br/><b>Watermark</b>
+<br/><b>Enable Watermark</b> adds an image watermark as a second FFmpeg input and uses filter_complex.
+<br/><b>Image path</b> accepts common FFmpeg image files such as PNG, JPG, BMP, TIFF, TGA, GIF, WEBP, or an FFAStrans variable path such as %s_var%.
+<br/><b>Position</b> uses a 3x3 grid, matching the timecode position picker.
+<br/><b>X Offset</b> and <b>Y Offset</b> accept numbers or FFAStrans variables and move the watermark from the selected grid point.
+<br/><b>Resize</b> can keep the original watermark size, fit inside the source, fit source width, or fit source height. The source reference is the video after Scale has been applied.
+<br/><b>Opacity</b> controls the watermark alpha from 0 to 100.
+<br/>Watermark requires video re-encoding and is ignored when Video Codec is Copy.
+
+<br/><br/><b>Timecode Burn-in</b>
+<br/><b>Enable Timecode</b> adds an FFmpeg drawtext timecode overlay.
+<br/><b>Start Timecode</b> is used when original source timecode is not enabled, or when the source fallback is set to use this field. It accepts timecode values such as 00:00:00:00 or 00:00:00;00. Empty values reset to 00:00:00:00.
+<br/><b>Use original media start timecode</b> makes the processor probe the source during execution with ffprobe and replace the command placeholder with the detected source timecode.
+<br/><b>If no source timecode</b> appears only when original source timecode is enabled. It can start from 00:00:00:00 or use the Start Timecode value above.
+<br/><b>Timecode FPS</b> can use the selected/source framerate or a fixed value.
+<br/><b>Timecode Font</b> can use FFmpeg default font handling, one of the common Windows font files, or a custom installed font name/full font path. The built-in list uses Arial, Calibri, Consolas, Courier New, and Tahoma.
+<br/><b>Position</b> chooses the burn-in location.
+<br/><b>Timecode Size</b> chooses a preset size or a custom percent value adjusted by the - and + buttons.
+<br/><b>Background opacity</b> controls the black box behind the timecode.
+<br/><b>Foreground opacity</b> controls the white timecode text opacity.
+
+<br/><br/><b>Audio</b>
+<br/><b>Audio Codec</b> can encode with MP4-compatible codecs, copy the source audio, or disable audio with No Audio.
+<br/><b>Copy</b> writes -c:a copy and hides encode-only controls.
+<br/><b>No Audio</b> writes -an and hides audio encode controls.
+<br/><b>Sample Rate</b>, <b>Bitrate</b>, and <b>Channels</b> are used only when audio is encoded.
+<br/><b>Track Name</b> writes the audio stream title metadata and accepts FFAStrans variables.
+<br/><b>Audio Delay</b> accepts numbers or FFAStrans variables. Empty or 0 keeps default timing.
+<br/><b>Language</b> writes the three-letter audio language tag.
+
+<br/><br/><b>Advanced</b>
+<br/><b>Threads</b> accepts a number or FFAStrans variable. Empty or 0 keeps FFmpeg default behavior.
+<br/><b>Hardware Acceleration</b> adds -hwaccel before the source input when selected.
+<br/><b>Open GOP</b> is Default or On and is shown only for compatible x264/x265 software encoders. Default adds nothing.
+<br/><b>Faststart</b> is Default or On for MP4. On adds -movflags +faststart.
+<br/><b>Brand</b> adds MP4 -brand only when a non-default brand is selected.
+<br/><b>Codec ID</b> adds -tag:v only when a supported non-default video tag is selected.
+<br/><b>Force CFR</b> is Default or On. On adds -vsync cfr.
+<br/><b>Extra Arguments</b> are appended to the FFmpeg command. Use this only for options that are valid for the selected codec and container.
+
+<br/><br/><b>Options</b>
+<br/><b>Generated Command</b> is hidden by default. Set it to Shown when you want to inspect the exact command the UI is building.
+<br/><b>Preset JSON</b> exports the current settings to a JSON file and imports compatible JSON presets. The preview box fits inside the Options tab.
+<br/>Presets include presetSchemaVersion so future incompatible formats can be rejected safely.
+
+<br/><br/><b>Execution Output</b>
+<br/>The processor sets s_source to the encoded output file. If an error occurs, it sets s_job_error_msg and exits with an FFAStrans error.
+
+<br/>
+</body>
