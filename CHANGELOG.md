@@ -2,6 +2,25 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.39 - 2026-06-19
+
+- Matched FFmpeg Path validation hints to the shared Min GOP Size hint styling.
+- Widened the FFmpeg Path input and tightened spacing before its helper buttons.
+
+## 0.0.38 - 2026-06-19
+
+- Restored the previous FFmpeg Path validation hint styling and widened the path input slightly.
+
+## 0.0.37 - 2026-06-19
+
+- Widened the FFmpeg Path input and nudged its help button alignment.
+- Made FFmpeg Path validation errors larger, bold, and more vibrant red.
+
+## 0.0.36 - 2026-06-19
+
+- Aligned the FFmpeg Path help button consistently between internal and external FFmpeg modes.
+- Renamed the Video tab's Video Language label to Language and aligned the moved dropdown row.
+
 ## 0.0.35 - 2026-06-19
 
 - Passed the generated dry-run batch file to FFAStrans as `s_source` when batch export is enabled.

@@ -308,6 +308,10 @@
             margin-top: 5px;
         }
 
+        .video-language-bottom-row .ffas-label-left {
+            margin-bottom: 5px;
+        }
+
         body {
             background-color: #f0f0f0;
             visibility: hidden;
@@ -323,14 +327,34 @@
         }
 
         #FFmpegPath {
-            width: 198px;
+            width: 196px;
         }
 
         #FFmpegPathStatus {
             display: inline-block;
-            width: 14px;
-            margin-left: 4px;
+            /* width: 1px; */
+            margin-left: 1px;
+            margin-right: 1px;
+            font-family: sans-serif;
+            font-size: 12px;
             text-align: center;
+        }
+
+        #FFmpegVarsBtn,
+        #FFmpegPathAfter {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+
+        #FFmpegPathHelpAnchor {
+            display: inline-block;
+            width: 0;
+            height: 1px;
+            margin-left: -2px;
+            vertical-align: middle;
         }
 
         /* slider start */

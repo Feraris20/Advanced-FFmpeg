@@ -76,7 +76,6 @@
             toggleAudioOptions();
             toggleGeneratedCommand();
             applyTheme();
-            moveVideoLanguageToBottom();
             initOptionHelp();
             sortLanguageDropdowns();
             updateCodecIdOptions();
@@ -293,7 +292,6 @@
             toggleAudioOptions();
             toggleGeneratedCommand();
             applyTheme();
-            moveVideoLanguageToBottom();
             initOptionHelp();
             sortLanguageDropdowns();
             updateCodecIdOptions();
@@ -301,7 +299,7 @@
             updateCommand();
         }
 
-        
+
         function ffas_load_preset(base64_string) {
             try {
                 captureDefaultValues();
@@ -1846,8 +1844,10 @@
                 pathInput.disabled = true;
                 pathInput.style.backgroundColor = "";
 
-                varsBtn.style.display = "none";
-                fileBrowserBtn.style.display = "none";
+                varsBtn.style.display = "inline-block";
+                varsBtn.style.visibility = "hidden";
+                fileBrowserBtn.style.display = "inline-block";
+                fileBrowserBtn.style.visibility = "hidden";
 
                 if (hint) {
                     hint.innerText = "";
@@ -1857,7 +1857,9 @@
 
                 // Show buttons
                 varsBtn.style.display = "inline-block";
+                varsBtn.style.visibility = "visible";
                 fileBrowserBtn.style.display = "inline-block";
+                fileBrowserBtn.style.visibility = "visible";
 
 
                 // Remove either internal FFmpeg variable
@@ -1917,38 +1919,13 @@
 
             var mode = document.getElementById("FFmpegMode");
             var value = el.value.trim();
-            var hintId = el.id + "_hint";
-            var hint = document.getElementById(hintId);
 
             function clearError() {
-                el.style.backgroundColor = "";
-                if (hint) hint.innerText = "";
+                clearFieldError(el);
             }
 
             function showError(message) {
-                if (!hint) {
-                    hint = document.createElement("div");
-                    hint.id = hintId;
-                    hint.style.color = "red";
-                    hint.style.fontSize = "11px";
-                    hint.style.marginTop = "2px";
-                    hint.style.marginLeft = "144px";
-                    hint.style.marginBottom = "5px";
-
-                    var target =
-                        document.getElementById("FFmpegPathAfter") ||
-                        document.getElementById("FFmpegVarsBtn") ||
-                        el;
-
-                    if (target.nextSibling) {
-                        target.parentNode.insertBefore(hint, target.nextSibling);
-                    } else {
-                        target.parentNode.appendChild(hint);
-                    }
-                }
-
-                el.style.backgroundColor = "#ffe5e5";
-                hint.innerText = message;
+                showFieldError(el, message);
                 return false;
             }
 
@@ -2646,7 +2623,7 @@
             { id: "AudioTrackName", title: "Track Name", text: "Writes stream title metadata for the first audio stream.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "AudioDelay", title: "Audio Delay", text: "For encoded audio, uses the adelay filter to delay samples by milliseconds.", url: FFMPEG_DOC_BASE + "ffmpeg-filters.html#adelay" },
             { id: "AudioLanguage", title: "Language", text: "Writes stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
-            { id: "VideoLanguage", title: "Video Language", text: "Writes the video stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
+            { id: "VideoLanguage", title: "Language", text: "Writes the video stream language metadata using the selected three-letter language code.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Main-options" },
             { id: "Threads", title: "Threads", text: "Sets FFmpeg thread count when supported. Leaving it empty or zero lets FFmpeg decide.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-options" },
             { id: "HWAccel", title: "Hardware Acceleration", text: "Adds -hwaccel for supported decoding acceleration. Actual support depends on the local FFmpeg build and hardware.", url: FFMPEG_DOC_BASE + "ffmpeg.html#Advanced-Video-options" },
             { id: "OpenGOP", title: "Open GOP", text: "Encoder private setting for supported x264/x265 encoders. Default emits no option.", url: FFMPEG_DOC_BASE + "ffmpeg-codecs.html" },
@@ -2756,46 +2733,6 @@
             } else {
                 target.parentNode.appendChild(newNode);
             }
-        }
-
-        function moveVideoLanguageToBottom() {
-            var tab = document.getElementById("TabVideo");
-            var selectEl = document.getElementById("VideoLanguage");
-            var grid = tab ? tab.getElementsByClassName("form-grid")[0] : null;
-            var columns = [];
-
-            if (grid) {
-                for (var i = 0; i < grid.children.length; i++) {
-                    if (grid.children[i].tagName && grid.children[i].tagName.toLowerCase() === "div") {
-                        columns.push(grid.children[i]);
-                    }
-                }
-            }
-
-            var targetColumn = columns.length > 1 ? columns[1] : columns[0];
-
-            if (!tab || !selectEl || !targetColumn || document.getElementById("VideoLanguageBottomRow")) {
-                return;
-            }
-
-            var label = findOptionHelpLabel(selectEl);
-            var helpWrap = document.getElementById("OptionHelpWrap_VideoLanguage");
-            var br = selectEl.nextSibling;
-
-            while (br && !(br.nodeType === 1 && br.tagName && br.tagName.toLowerCase() === "br")) {
-                br = br.nextSibling;
-            }
-
-            var row = document.createElement("div");
-            row.id = "VideoLanguageBottomRow";
-            row.className = "video-language-bottom-row";
-
-            if (label) row.appendChild(label);
-            row.appendChild(selectEl);
-            if (helpWrap) row.appendChild(helpWrap);
-            if (br && br.parentNode) br.parentNode.removeChild(br);
-
-            targetColumn.appendChild(row);
         }
 
         function isOptionHelpHidden(el, target) {
@@ -2956,8 +2893,7 @@
             toggleWatermarkOptions();
             toggleAudioOptions();
             toggleGeneratedCommand();
-            applyTheme();
-            moveVideoLanguageToBottom();
+            applyTheme();            
             initOptionHelp();
             sortLanguageDropdowns();
             updateCodecIdOptions();
@@ -3016,7 +2952,8 @@
         <button id="btnFilters" class="tablinks" onclick="openTab('TabFilters', 'btnFilters')">Filters</button>
         <button id="btnAudio" class="tablinks" onclick="openTab('TabAudio', 'btnAudio')">Audio</button>
         <button id="btnAdvanced" class="tablinks" onclick="openTab('TabAdvanced', 'btnAdvanced')">Advanced</button>
-        <button id="btnOptions" class="tablinks tab-right" onclick="openTab('TabOptions', 'btnOptions')">Options</button>
+        <button id="btnOptions" class="tablinks tab-right"
+            onclick="openTab('TabOptions', 'btnOptions')">Options</button>
     </div>
 
     <div id="TabGeneral" class="tabcontent" style="display: block;">
@@ -3036,15 +2973,15 @@
 
         <label class="ffas-label-left">FFmpeg Path: </label>
         <input class="ffas-text-input" id="FFmpegPath" oninput="validateFFmpegPathField(this)"
-            onchange="validateFFmpegPathField(this)" placeholder="Path to ffmpeg.exe or %s_var%" value="%s_ffmpegx64%" disabled />
+            onchange="validateFFmpegPathField(this)" placeholder="Path to ffmpeg.exe or %s_var%" value="%s_ffmpegx64%"
+            disabled />
 
-        <span id="FFmpegPathStatus" style="margin-left:6px; font-family:sans-serif; font-size:12px;"></span>
+        <span id="FFmpegPathStatus"></span>
 
         <input width="2px" type="submit" value="<" name="open_vars" data-parent="FFmpegPath" data-user_vars_only="true"
             id="FFmpegVarsBtn" />
 
-        <input style="width: 30px; padding: 0; font-weight: bold;" type="submit" value="..." name="open_filebrowser"
-            data-parent="FFmpegPath" id="FFmpegPathAfter" />
+        <input type="submit" value="..." name="open_filebrowser" data-parent="FFmpegPath" id="FFmpegPathAfter" />
         <span id="FFmpegPathHelpAnchor"></span>
 
         <div class="section-title">Container Settings</div>
@@ -3075,195 +3012,7 @@
                     <option value="copy">Copy (No Re-encode)</option>
                 </select><br />
 
-                <label class="ffas-label-left">Video Language: </label>
-                <select class="ffas-text-input" id="VideoLanguage" onchange="updateCommand()">
-                    <option value="none" selected>none</option>
-                    <option value="aar">Afar</option>
-                    <option value="abk">Abkhazian</option>
-                    <option value="afr">Afrikaans</option>
-                    <option value="aka">Akan</option>
-                    <option value="alb">Albanian</option>
-                    <option value="amh">Amharic</option>
-                    <option value="ara">Arabic</option>
-                    <option value="arg">Aragonese</option>
-                    <option value="arm">Armenian</option>
-                    <option value="asm">Assamese</option>
-                    <option value="ava">Avaric</option>
-                    <option value="ave">Avestan</option>
-                    <option value="aym">Aymara</option>
-                    <option value="aze">Azerbaijani</option>
-                    <option value="bak">Bashkir</option>
-                    <option value="bam">Bambara</option>
-                    <option value="baq">Basque</option>
-                    <option value="bel">Belarusian</option>
-                    <option value="ben">Bengali</option>
-                    <option value="bih">Bihari</option>
-                    <option value="bis">Bislama</option>
-                    <option value="bos">Bosnian</option>
-                    <option value="bre">Breton</option>
-                    <option value="bul">Bulgarian</option>
-                    <option value="bur">Burmese</option>
-                    <option value="cat">Catalan</option>
-                    <option value="cha">Chamorro</option>
-                    <option value="che">Chechen</option>
-                    <option value="chi">Chinese</option>
-                    <option value="chu">Church Slavic</option>
-                    <option value="chv">Chuvash</option>
-                    <option value="cor">Cornish</option>
-                    <option value="cos">Corsican</option>
-                    <option value="cre">Cree</option>
-                    <option value="cze">Czech</option>
-                    <option value="dan">Danish</option>
-                    <option value="div">Divehi</option>
-                    <option value="dut">Dutch</option>
-                    <option value="eng">English</option>
-                    <option value="epo">Esperanto</option>
-                    <option value="est">Estonian</option>
-                    <option value="ewe">Ewe</option>
-                    <option value="fao">Faroese</option>
-                    <option value="fij">Fijian</option>
-                    <option value="fin">Finnish</option>
-                    <option value="fre">French</option>
-                    <option value="fry">Western Frisian</option>
-                    <option value="ful">Fulah</option>
-                    <option value="geo">Georgian</option>
-                    <option value="ger">German</option>
-                    <option value="gla">Gaelic</option>
-                    <option value="gle">Irish</option>
-                    <option value="glg">Galician</option>
-                    <option value="glv">Manx</option>
-                    <option value="gre">Greek</option>
-                    <option value="grn">Guarani</option>
-                    <option value="guj">Gujarati</option>
-                    <option value="hat">Haitian</option>
-                    <option value="hau">Hausa</option>
-                    <option value="heb">Hebrew</option>
-                    <option value="her">Herero</option>
-                    <option value="hin">Hindi</option>
-                    <option value="hmo">Hiri Motu</option>
-                    <option value="hrv">Croatian</option>
-                    <option value="hun">Hungarian</option>
-                    <option value="ibo">Igbo</option>
-                    <option value="ice">Icelandic</option>
-                    <option value="ido">Ido</option>
-                    <option value="iii">Sichuan Yi</option>
-                    <option value="iku">Inuktitut</option>
-                    <option value="ile">Interlingue</option>
-                    <option value="ina">Interlingua</option>
-                    <option value="ind">Indonesian</option>
-                    <option value="ipk">Inupiaq</option>
-                    <option value="ita">Italian</option>
-                    <option value="jav">Javanese</option>
-                    <option value="jpn">Japanese</option>
-                    <option value="kal">Kalaallisut</option>
-                    <option value="kan">Kannada</option>
-                    <option value="kas">Kashmiri</option>
-                    <option value="kau">Kanuri</option>
-                    <option value="kaz">Kazakh</option>
-                    <option value="khm">Khmer</option>
-                    <option value="kik">Kikuyu</option>
-                    <option value="kin">Kinyarwanda</option>
-                    <option value="kir">Kirghiz</option>
-                    <option value="kom">Komi</option>
-                    <option value="kon">Kongo</option>
-                    <option value="kor">Korean</option>
-                    <option value="kua">Kuanyama</option>
-                    <option value="kur">Kurdish</option>
-                    <option value="lao">Lao</option>
-                    <option value="lat">Latin</option>
-                    <option value="lav">Latvian</option>
-                    <option value="lim">Limburgan</option>
-                    <option value="lin">Lingala</option>
-                    <option value="lit">Lithuanian</option>
-                    <option value="ltz">Luxembourgish</option>
-                    <option value="lub">Luba-Katanga</option>
-                    <option value="lug">Ganda</option>
-                    <option value="mac">Macedonian</option>
-                    <option value="mah">Marshallese</option>
-                    <option value="mal">Malayalam</option>
-                    <option value="mao">Maori</option>
-                    <option value="mar">Marathi</option>
-                    <option value="may">Malay</option>
-                    <option value="mlg">Malagasy</option>
-                    <option value="mlt">Maltese</option>
-                    <option value="mon">Mongolian</option>
-                    <option value="nau">Nauru</option>
-                    <option value="nav">Navajo</option>
-                    <option value="nbl">Ndebele, South</option>
-                    <option value="nde">Ndebele, North</option>
-                    <option value="ndo">Ndonga</option>
-                    <option value="nep">Nepali</option>
-                    <option value="nno">Norwegian Nynorsk</option>
-                    <option value="nob">Norwegian Bokmal</option>
-                    <option value="nor">Norwegian</option>
-                    <option value="nya">Chichewa</option>
-                    <option value="oci">Occitan</option>
-                    <option value="oji">Ojibwa</option>
-                    <option value="ori">Oriya</option>
-                    <option value="orm">Oromo</option>
-                    <option value="oss">Ossetian</option>
-                    <option value="pan">Panjabi</option>
-                    <option value="per">Persian</option>
-                    <option value="pli">Pali</option>
-                    <option value="pol">Polish</option>
-                    <option value="por">Portuguese</option>
-                    <option value="pus">Pushto</option>
-                    <option value="que">Quechua</option>
-                    <option value="roh">Raeto-Romance</option>
-                    <option value="ron">Romanian</option>
-                    <option value="run">Rundi</option>
-                    <option value="rus">Russian</option>
-                    <option value="sag">Sango</option>
-                    <option value="san">Sanskrit</option>
-                    <option value="sin">Sinhala</option>
-                    <option value="sla">Slavic</option>
-                    <option value="slo">Slovak</option>
-                    <option value="slv">Slovenian</option>
-                    <option value="sme">Northern Sami</option>
-                    <option value="smo">Samoan</option>
-                    <option value="sna">Shona</option>
-                    <option value="snd">Sindhi</option>
-                    <option value="som">Somali</option>
-                    <option value="sot">Sotho, Southern</option>
-                    <option value="spa">Spanish</option>
-                    <option value="srd">Sardinian</option>
-                    <option value="srp">Serbian</option>
-                    <option value="ssw">Swazi</option>
-                    <option value="sun">Sundanese</option>
-                    <option value="swa">Swahili</option>
-                    <option value="swe">Swedish</option>
-                    <option value="tah">Tahitian</option>
-                    <option value="tam">Tamil</option>
-                    <option value="tat">Tatar</option>
-                    <option value="tel">Telugu</option>
-                    <option value="tgk">Tajik</option>
-                    <option value="tgl">Tagalog</option>
-                    <option value="tha">Thai</option>
-                    <option value="tib">Tibetan</option>
-                    <option value="tir">Tigrinya</option>
-                    <option value="ton">Tonga</option>
-                    <option value="tsn">Tswana</option>
-                    <option value="tso">Tsonga</option>
-                    <option value="tur">Turkish</option>
-                    <option value="tuk">Turkmen</option>
-                    <option value="twi">Twi</option>
-                    <option value="uig">Uighur</option>
-                    <option value="ukr">Ukrainian</option>
-                    <option value="urd">Urdu</option>
-                    <option value="uzb">Uzbek</option>
-                    <option value="ven">Venda</option>
-                    <option value="vie">Vietnamese</option>
-                    <option value="vol">Volapük</option>
-                    <option value="wel">Welsh</option>
-                    <option value="wln">Walloon</option>
-                    <option value="wol">Wolof</option>
-                    <option value="xho">Xhosa</option>
-                    <option value="yid">Yiddish</option>
-                    <option value="yor">Yoruba</option>
-                    <option value="zha">Chinese, Yue</option>
-                    <option value="zho">Chinese</option>
-                    <option value="zul">Zulu</option>
-                </select><br />
+
 
                 <label class="ffas-label-left">Rate Control: </label>
                 <select class="ffas-text-input" id="RateControl" onchange="updateCommand()">
@@ -3413,16 +3162,16 @@
                 <label class="ffas-label-left">Keyframe Interval: </label>
                 <input type="text" class="ffas-text-input" id="KeyframeInt" onfocus="clearZeroDefault(this)"
                     oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
-                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
-                    value="0" placeholder="0, number, or %s_var%" />
+                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)" value="0"
+                    placeholder="0, number, or %s_var%" />
                 <input width="2px" type="submit" value="<" name="open_vars" data-parent="KeyframeInt"
                     data-user_vars_only="true" id="KeyframeIntVarsBtn" /><br />
 
                 <label class="ffas-label-left">Min GOP Size: </label>
                 <input type="text" class="ffas-text-input" id="MinGOP" onfocus="clearZeroDefault(this)"
                     oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
-                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
-                    value="0" placeholder="0, number, or %s_var%" />
+                    onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)" value="0"
+                    placeholder="0, number, or %s_var%" />
                 <input width="2px" type="submit" value="<" name="open_vars" data-parent="MinGOP"
                     data-user_vars_only="true" id="MinGOPVarsBtn" /><br />
 
@@ -3432,6 +3181,197 @@
                         <option value="none" selected>none</option>
                         <option value="3">3 (Side-by-Side)</option>
                         <option value="4">4 (Top-Bottom)</option>
+                    </select><br />
+                </div>
+                <div id="" VideoLanguageRow">
+                    <label class="ffas-label-left">Language: </label>
+                    <select class="ffas-text-input" id="VideoLanguage" onchange="updateCommand()">
+                        <option value="none" selected>none</option>
+                        <option value="aar">Afar</option>
+                        <option value="abk">Abkhazian</option>
+                        <option value="afr">Afrikaans</option>
+                        <option value="aka">Akan</option>
+                        <option value="alb">Albanian</option>
+                        <option value="amh">Amharic</option>
+                        <option value="ara">Arabic</option>
+                        <option value="arg">Aragonese</option>
+                        <option value="arm">Armenian</option>
+                        <option value="asm">Assamese</option>
+                        <option value="ava">Avaric</option>
+                        <option value="ave">Avestan</option>
+                        <option value="aym">Aymara</option>
+                        <option value="aze">Azerbaijani</option>
+                        <option value="bak">Bashkir</option>
+                        <option value="bam">Bambara</option>
+                        <option value="baq">Basque</option>
+                        <option value="bel">Belarusian</option>
+                        <option value="ben">Bengali</option>
+                        <option value="bih">Bihari</option>
+                        <option value="bis">Bislama</option>
+                        <option value="bos">Bosnian</option>
+                        <option value="bre">Breton</option>
+                        <option value="bul">Bulgarian</option>
+                        <option value="bur">Burmese</option>
+                        <option value="cat">Catalan</option>
+                        <option value="cha">Chamorro</option>
+                        <option value="che">Chechen</option>
+                        <option value="chi">Chinese</option>
+                        <option value="chu">Church Slavic</option>
+                        <option value="chv">Chuvash</option>
+                        <option value="cor">Cornish</option>
+                        <option value="cos">Corsican</option>
+                        <option value="cre">Cree</option>
+                        <option value="cze">Czech</option>
+                        <option value="dan">Danish</option>
+                        <option value="div">Divehi</option>
+                        <option value="dut">Dutch</option>
+                        <option value="eng">English</option>
+                        <option value="epo">Esperanto</option>
+                        <option value="est">Estonian</option>
+                        <option value="ewe">Ewe</option>
+                        <option value="fao">Faroese</option>
+                        <option value="fij">Fijian</option>
+                        <option value="fin">Finnish</option>
+                        <option value="fre">French</option>
+                        <option value="fry">Western Frisian</option>
+                        <option value="ful">Fulah</option>
+                        <option value="geo">Georgian</option>
+                        <option value="ger">German</option>
+                        <option value="gla">Gaelic</option>
+                        <option value="gle">Irish</option>
+                        <option value="glg">Galician</option>
+                        <option value="glv">Manx</option>
+                        <option value="gre">Greek</option>
+                        <option value="grn">Guarani</option>
+                        <option value="guj">Gujarati</option>
+                        <option value="hat">Haitian</option>
+                        <option value="hau">Hausa</option>
+                        <option value="heb">Hebrew</option>
+                        <option value="her">Herero</option>
+                        <option value="hin">Hindi</option>
+                        <option value="hmo">Hiri Motu</option>
+                        <option value="hrv">Croatian</option>
+                        <option value="hun">Hungarian</option>
+                        <option value="ibo">Igbo</option>
+                        <option value="ice">Icelandic</option>
+                        <option value="ido">Ido</option>
+                        <option value="iii">Sichuan Yi</option>
+                        <option value="iku">Inuktitut</option>
+                        <option value="ile">Interlingue</option>
+                        <option value="ina">Interlingua</option>
+                        <option value="ind">Indonesian</option>
+                        <option value="ipk">Inupiaq</option>
+                        <option value="ita">Italian</option>
+                        <option value="jav">Javanese</option>
+                        <option value="jpn">Japanese</option>
+                        <option value="kal">Kalaallisut</option>
+                        <option value="kan">Kannada</option>
+                        <option value="kas">Kashmiri</option>
+                        <option value="kau">Kanuri</option>
+                        <option value="kaz">Kazakh</option>
+                        <option value="khm">Khmer</option>
+                        <option value="kik">Kikuyu</option>
+                        <option value="kin">Kinyarwanda</option>
+                        <option value="kir">Kirghiz</option>
+                        <option value="kom">Komi</option>
+                        <option value="kon">Kongo</option>
+                        <option value="kor">Korean</option>
+                        <option value="kua">Kuanyama</option>
+                        <option value="kur">Kurdish</option>
+                        <option value="lao">Lao</option>
+                        <option value="lat">Latin</option>
+                        <option value="lav">Latvian</option>
+                        <option value="lim">Limburgan</option>
+                        <option value="lin">Lingala</option>
+                        <option value="lit">Lithuanian</option>
+                        <option value="ltz">Luxembourgish</option>
+                        <option value="lub">Luba-Katanga</option>
+                        <option value="lug">Ganda</option>
+                        <option value="mac">Macedonian</option>
+                        <option value="mah">Marshallese</option>
+                        <option value="mal">Malayalam</option>
+                        <option value="mao">Maori</option>
+                        <option value="mar">Marathi</option>
+                        <option value="may">Malay</option>
+                        <option value="mlg">Malagasy</option>
+                        <option value="mlt">Maltese</option>
+                        <option value="mon">Mongolian</option>
+                        <option value="nau">Nauru</option>
+                        <option value="nav">Navajo</option>
+                        <option value="nbl">Ndebele, South</option>
+                        <option value="nde">Ndebele, North</option>
+                        <option value="ndo">Ndonga</option>
+                        <option value="nep">Nepali</option>
+                        <option value="nno">Norwegian Nynorsk</option>
+                        <option value="nob">Norwegian Bokmal</option>
+                        <option value="nor">Norwegian</option>
+                        <option value="nya">Chichewa</option>
+                        <option value="oci">Occitan</option>
+                        <option value="oji">Ojibwa</option>
+                        <option value="ori">Oriya</option>
+                        <option value="orm">Oromo</option>
+                        <option value="oss">Ossetian</option>
+                        <option value="pan">Panjabi</option>
+                        <option value="per">Persian</option>
+                        <option value="pli">Pali</option>
+                        <option value="pol">Polish</option>
+                        <option value="por">Portuguese</option>
+                        <option value="pus">Pushto</option>
+                        <option value="que">Quechua</option>
+                        <option value="roh">Raeto-Romance</option>
+                        <option value="ron">Romanian</option>
+                        <option value="run">Rundi</option>
+                        <option value="rus">Russian</option>
+                        <option value="sag">Sango</option>
+                        <option value="san">Sanskrit</option>
+                        <option value="sin">Sinhala</option>
+                        <option value="sla">Slavic</option>
+                        <option value="slo">Slovak</option>
+                        <option value="slv">Slovenian</option>
+                        <option value="sme">Northern Sami</option>
+                        <option value="smo">Samoan</option>
+                        <option value="sna">Shona</option>
+                        <option value="snd">Sindhi</option>
+                        <option value="som">Somali</option>
+                        <option value="sot">Sotho, Southern</option>
+                        <option value="spa">Spanish</option>
+                        <option value="srd">Sardinian</option>
+                        <option value="srp">Serbian</option>
+                        <option value="ssw">Swazi</option>
+                        <option value="sun">Sundanese</option>
+                        <option value="swa">Swahili</option>
+                        <option value="swe">Swedish</option>
+                        <option value="tah">Tahitian</option>
+                        <option value="tam">Tamil</option>
+                        <option value="tat">Tatar</option>
+                        <option value="tel">Telugu</option>
+                        <option value="tgk">Tajik</option>
+                        <option value="tgl">Tagalog</option>
+                        <option value="tha">Thai</option>
+                        <option value="tib">Tibetan</option>
+                        <option value="tir">Tigrinya</option>
+                        <option value="ton">Tonga</option>
+                        <option value="tsn">Tswana</option>
+                        <option value="tso">Tsonga</option>
+                        <option value="tur">Turkish</option>
+                        <option value="tuk">Turkmen</option>
+                        <option value="twi">Twi</option>
+                        <option value="uig">Uighur</option>
+                        <option value="ukr">Ukrainian</option>
+                        <option value="urd">Urdu</option>
+                        <option value="uzb">Uzbek</option>
+                        <option value="ven">Venda</option>
+                        <option value="vie">Vietnamese</option>
+                        <option value="vol">Volapük</option>
+                        <option value="wel">Welsh</option>
+                        <option value="wln">Walloon</option>
+                        <option value="wol">Wolof</option>
+                        <option value="xho">Xhosa</option>
+                        <option value="yid">Yiddish</option>
+                        <option value="yor">Yoruba</option>
+                        <option value="zha">Chinese, Yue</option>
+                        <option value="zho">Chinese</option>
+                        <option value="zul">Zulu</option>
                     </select><br />
                 </div>
             </div>
@@ -3500,35 +3440,44 @@
             <input type="hidden" id="WatermarkPosition" value="br" />
             <table class="tc-position" id="WatermarkPositionGrid">
                 <tr>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="tl" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="tc" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="tr" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tl"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tc"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="tr"
+                            onchange="setWatermarkPosition(this.value)"></td>
                 </tr>
                 <tr>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="ml" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="mc" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="mr" onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="ml"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="mc"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="mr"
+                            onchange="setWatermarkPosition(this.value)"></td>
                 </tr>
                 <tr>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="bl" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="bc" onchange="setWatermarkPosition(this.value)"></td>
-                    <td><input type="radio" name="WatermarkPositionRadio" value="br" checked onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="bl"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="bc"
+                            onchange="setWatermarkPosition(this.value)"></td>
+                    <td><input type="radio" name="WatermarkPositionRadio" value="br" checked
+                            onchange="setWatermarkPosition(this.value)"></td>
                 </tr>
             </table><br>
 
             <label class="ffas-label-left">X Offset:</label>
             <input type="text" class="ffas-text-input" id="WatermarkXOffset" onfocus="clearZeroDefault(this)"
                 oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
-                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
-                value="10" placeholder="0, number, or %s_var%" />
+                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)" value="10"
+                placeholder="0, number, or %s_var%" />
             <input width="2px" type="submit" value="<" name="open_vars" data-parent="WatermarkXOffset"
                 data-user_vars_only="true" id="WatermarkXOffsetVarsBtn" /><br>
 
             <label class="ffas-label-left">Y Offset:</label>
             <input type="text" class="ffas-text-input" id="WatermarkYOffset" onfocus="clearZeroDefault(this)"
                 oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
-                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
-                value="10" placeholder="0, number, or %s_var%" />
+                onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)" value="10"
+                placeholder="0, number, or %s_var%" />
             <input width="2px" type="submit" value="<" name="open_vars" data-parent="WatermarkYOffset"
                 data-user_vars_only="true" id="WatermarkYOffsetVarsBtn" /><br>
 
@@ -3542,8 +3491,7 @@
 
             <label class="ffas-label-left">Opacity:</label>
             <input type="range" id="WatermarkOpacity" min="0" max="100" value="100"
-                oninput="syncWatermarkOpacity(); updateCommand();"
-                onchange="syncWatermarkOpacity(); updateCommand();"
+                oninput="syncWatermarkOpacity(); updateCommand();" onchange="syncWatermarkOpacity(); updateCommand();"
                 onmousemove="syncWatermarkOpacity();" />
             <span id="WatermarkOpacityValue">100</span><br>
         </div>
@@ -3557,9 +3505,8 @@
 
         <div id="TCSettings" style="display:none;">
             <label class="ffas-label-left">Start Timecode:</label>
-            <input class="ffas-text-input" id="TCStart" value="00:00:00:00"
-                onkeyup="validateStartTimecode(true,false)" onchange="validateStartTimecode(true,true)"
-                placeholder="00:00:00:00" style="width:260px;" />
+            <input class="ffas-text-input" id="TCStart" value="00:00:00:00" onkeyup="validateStartTimecode(true,false)"
+                onchange="validateStartTimecode(true,true)" placeholder="00:00:00:00" style="width:260px;" />
             <br>
 
             <div class="ffas-checkbox-row" style="margin-left:144px;">
@@ -3567,11 +3514,15 @@
                 <label for="TCUseSource" style="font-weight:normal;">
                     Use original media start timecode
                     <span class="ffas-help-wrap">
-                        <span class="ffas-help-button" onclick="return toggleHelpPopup('TCUseSourceHelp', window.event);">?</span>
+                        <span class="ffas-help-button"
+                            onclick="return toggleHelpPopup('TCUseSourceHelp', window.event);">?</span>
                         <span class="ffas-help-popup" id="TCUseSourceHelp" onclick="window.event.cancelBubble=true;">
-                            <span class="ffas-help-close" onclick="closeHelpPopups(); window.event.cancelBubble=true;">x</span>
+                            <span class="ffas-help-close"
+                                onclick="closeHelpPopups(); window.event.cancelBubble=true;">x</span>
                             <span class="ffas-help-title">Original Media Timecode</span>
-                            At execution, FFprobe reads the source media timecode and uses it for burn-in. If no valid source timecode is found, the fallback below decides whether burn-in starts from 00:00:00:00 or from the Start Timecode field.
+                            At execution, FFprobe reads the source media timecode and uses it for burn-in. If no valid
+                            source timecode is found, the fallback below decides whether burn-in starts from 00:00:00:00
+                            or from the Start Timecode field.
                         </span>
                     </span>
                 </label>
@@ -3933,10 +3884,10 @@
         <label class="ffas-label-left">Threads: </label>
         <input type="text" class="ffas-text-input" id="Threads" onfocus="clearZeroDefault(this)"
             oninput="handleZeroDefaultInput(this)" onkeyup="handleZeroDefaultInput(this)"
-            onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)"
-            value="0" placeholder="0, number, or %s_var%" />
-        <input width="2px" type="submit" value="<" name="open_vars" data-parent="Threads"
-            data-user_vars_only="true" id="ThreadsVarsBtn" /><br />
+            onchange="handleZeroDefaultInput(this)" onblur="handleZeroDefaultBlur(this)" value="0"
+            placeholder="0, number, or %s_var%" />
+        <input width="2px" type="submit" value="<" name="open_vars" data-parent="Threads" data-user_vars_only="true"
+            id="ThreadsVarsBtn" /><br />
 
         <label class="ffas-label-left">Hardware Accel:</label>
         <select class="ffas-text-input" id="HWAccel" onchange="updateCommand()">
@@ -3998,7 +3949,8 @@
     <div id="TabOptions" class="tabcontent">
         <div class="tab-panel-header">
             <div class="section-title">Display Options</div>
-            <input type="button" class="tab-reset-button tab-reset-all-button" value="Reset All" onclick="return resetAllSettings()" />
+            <input type="button" class="tab-reset-button tab-reset-all-button" value="Reset All"
+                onclick="return resetAllSettings()" />
         </div>
 
         <label class="ffas-label-left">Generated Command:</label>
@@ -4032,7 +3984,8 @@
         <hr>
 
         <div class="section-title">Compatibility Summary</div>
-        <textarea class="command-output compatibility-summary-output" id="CompatibilitySummary" readonly="readonly"></textarea>
+        <textarea class="command-output compatibility-summary-output" id="CompatibilitySummary"
+            readonly="readonly"></textarea>
 
         <hr>
 
@@ -4045,7 +3998,8 @@
             <textarea class="command-output preset-json-output" id="PresetJson"></textarea>
             <div class="preset-json-actions" id="PresetJsonActions">
                 <input type="button" value="Export JSON File" onclick="return exportPresetJson()" />
-                <input type="button" value="Import JSON File" id="PresetJsonImportBtn" onclick="return importPresetJson()" />
+                <input type="button" value="Import JSON File" id="PresetJsonImportBtn"
+                    onclick="return importPresetJson()" />
                 <input type="file" id="PresetFileInput" accept=".json,application/json" style="display:none;"
                     onchange="return importPresetJsonFromFile(this)" />
             </div>
