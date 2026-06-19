@@ -2,6 +2,10 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.40 - 2026-06-19
+
+- Updated the README with dry-run behavior, compatibility summary details, filter/timecode notes, and runtime outputs.
+
 ## 0.0.39 - 2026-06-19
 
 - Matched FFmpeg Path validation hints to the shared Min GOP Size hint styling.
