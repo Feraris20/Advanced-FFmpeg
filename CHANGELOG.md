@@ -2,6 +2,11 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.41 - 2026-06-22
+
+- Prepared the GitHub release notes for the installable `Advanced-FFmpeg` processor folder.
+- Documented the release package expectation: include only the `Advanced-FFmpeg` folder in the release asset.
+
 ## 0.0.40 - 2026-06-19
 
 - Updated the README with dry-run behavior, compatibility summary details, filter/timecode notes, and runtime outputs.
