@@ -2,6 +2,10 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.42 - 2026-06-29
+
+- Increased the processor timeout to 180 minutes for longer FFmpeg jobs.
+
 ## 0.0.41 - 2026-06-22
 
 - Prepared the GitHub release notes for the installable `Advanced-FFmpeg` processor folder.

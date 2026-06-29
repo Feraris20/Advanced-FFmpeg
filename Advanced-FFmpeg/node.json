@@ -7,10 +7,10 @@
     "guid":  "0714c5f8-b59c-4485-aris-8ccd85ab8362",
     "script_interpreter":  "powershell.exe -ExecutionPolicy Unrestricted -File ",
     "proc_script":  "processor.ps1",
-    "timeout_minutes":  10,
+    "timeout_minutes":  180,
     "gui_window_width":  800,
     "gui_window_height":  600,
-    "version":  "0.0.41"
+    "version":  "0.0.42"
 }
 
 
