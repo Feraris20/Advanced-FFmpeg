@@ -25,6 +25,28 @@ Advanced-FFmpeg is an FFAStrans custom processor node for building FFmpeg encode
 - Optional dry-run execution that writes to FFmpeg's null muxer instead of producing media.
 - Optional dry-run batch export for inspecting or re-running the resolved command outside FFAStrans.
 
+## Screenshots
+
+### General Settings
+
+![General tab](docs/screenshots/general-tab.png)
+
+### Video Settings
+
+![Video tab](docs/screenshots/video-tab.png)
+
+### Filters
+
+![Filters tab](docs/screenshots/filters-tab.png)
+
+### Options, Dry Run, And Presets
+
+![Options tab](docs/screenshots/options-tab.png)
+
+### Themes
+
+![Theme comparison](docs/screenshots/themes-composite.png)
+
 ## Dry Run
 
 Dry Run changes the generated command to end with `-f null NUL`, so FFmpeg tests decoding, filtering, mapping, and encoding without writing the planned media output.
