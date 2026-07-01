@@ -117,6 +117,7 @@ public static class ProcessKillJob
 "@
 
 Write-Output "Starting Advanced-FFmpeg"
+$processorStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 if ($args.Count -lt 1 -or -not (Test-Path -LiteralPath $args[0] -PathType Leaf)) {
     Write-Error "Processor input JSON was not found."
@@ -219,6 +220,28 @@ function Write-DryRunBatch([string]$BatchPath, [string]$WorkingDirectory, [strin
 
     $batchContent |
     Out-File -Encoding ASCII -LiteralPath $BatchPath
+}
+
+function Format-ElapsedTime([TimeSpan]$Elapsed) {
+    if ($Elapsed.TotalHours -ge 1) {
+        return ("{0}h {1}m {2}s" -f [int][Math]::Floor($Elapsed.TotalHours), $Elapsed.Minutes, $Elapsed.Seconds)
+    }
+
+    if ($Elapsed.TotalMinutes -ge 1) {
+        return ("{0}m {1}s" -f [int][Math]::Floor($Elapsed.TotalMinutes), $Elapsed.Seconds)
+    }
+
+    return ("{0}s" -f [int][Math]::Ceiling([Math]::Max(0, $Elapsed.TotalSeconds)))
+}
+
+function Add-ElapsedToSuccessMessage([string]$Message, [string]$ElapsedText) {
+    $messageText = ([string]$Message).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($messageText)) {
+        return "It took $ElapsedText."
+    }
+
+    return "$messageText It took $ElapsedText."
 }
 
 function Exit-WithError([string]$Message) {
@@ -765,6 +788,11 @@ if ($dryRunEnabled) {
     else {
         $s_SuccessMessage = "Advanced-FFmpeg dry run completed successfully. Dry run was enabled, so no output file was produced. $s_SuccessMessage"
     }
+
+    $processorStopwatch.Stop()
+    $elapsedText = Format-ElapsedTime $processorStopwatch.Elapsed
+    $s_SuccessMessage = Add-ElapsedToSuccessMessage $s_SuccessMessage $elapsedText
+    Add-ProcessorOutput "s_elapsed_time" $elapsedText
     Add-ProcessorOutput "s_success" $s_SuccessMessage
     Write-ProcessorJson
 
@@ -783,6 +811,11 @@ Add-ProcessorOutput "s_source" $s_OutputFilePath
 if ([string]::IsNullOrWhiteSpace($s_SuccessMessage)) {
     $s_SuccessMessage = "Advanced-FFmpeg completed successfully."
 }
+
+$processorStopwatch.Stop()
+$elapsedText = Format-ElapsedTime $processorStopwatch.Elapsed
+$s_SuccessMessage = Add-ElapsedToSuccessMessage $s_SuccessMessage $elapsedText
+Add-ProcessorOutput "s_elapsed_time" $elapsedText
 Add-ProcessorOutput "s_success" $s_SuccessMessage
 Write-ProcessorJson
 

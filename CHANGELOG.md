@@ -2,6 +2,19 @@
 
 All notable changes to Advanced-FFmpeg are tracked here.
 
+## 0.0.45 - 2026-07-01
+
+- Moved Theme before update checking in the Options tab.
+- Added installed changelog details to the update checker info box.
+
+## 0.0.44 - 2026-07-01
+
+- Added an optional GitHub release update checker in the Options tab, defaulting to off.
+
+## 0.0.43 - 2026-07-01
+
+- Added elapsed processor runtime to successful completion messages and `s_elapsed_time`.
+
 ## 0.0.42 - 2026-06-29
 
 - Increased the processor timeout to 180 minutes for longer FFmpeg jobs.

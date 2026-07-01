@@ -87,6 +87,12 @@
         }
 
         var PRESET_SCHEMA_VERSION = 1;
+        var CURRENT_NODE_VERSION = "0.0.45";
+        var CURRENT_CHANGELOG_HTML = "<strong>Installed changelog:</strong><br />0.0.45<br />- Moved Theme before update checking in Options.<br />- Added installed changelog details to the update checker info box.<br /><br />0.0.44<br />- Added an optional GitHub release update checker in the Options tab, defaulting to off.<br /><br />0.0.43<br />- Added elapsed processor runtime to successful completion messages and s_elapsed_time.";
+        var UPDATE_CHECK_URL = "https://api.github.com/repos/Feraris20/Advanced-FFmpeg/releases/latest";
+        var UPDATE_CHECK_HAS_RUN = false;
+        var latestReleaseUrl = "";
+        var latestReleaseZipUrl = "";
         var DEFAULT_FIELD_VALUES = null;
 
         function getPresetFieldIds() {
@@ -98,7 +104,7 @@
                 "WatermarkResize", "WatermarkOpacity",
                 "ColorMode", "FramePacking", "OpenGOP", "KeyframeInt", "MinGOP", "DisplayMode",
                 "AudioCodec", "AudioTrackName", "AudioDelay", "AudioLanguage", "AudioBitrate", "AudioChannels", "AudioSampleRate",
-                "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "DryRunMode", "DryRunSaveBatch", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
+                "Threads", "ForceCFR", "HWAccel", "Faststart", "Brand", "CodecID", "ExtraArgs", "CommandVisibility", "DryRunMode", "DryRunSaveBatch", "UpdateCheckMode", "Theme", "GeneratedCommand", "SourceFilePath", "OutputFilePath",
                 "TCEnable", "TCStart", "TCUseSource", "TCSourceFallback", "TCFPS", "TCFont", "TCFontCustom", "TCPosition", "TCSize", "TCSizeCustom",
                 "TCBackgroundOpacity", "TCForegroundOpacity"
             ];
@@ -495,6 +501,7 @@
             }
 
             updateCompatibilitySummary();
+            maybeAutoCheckForUpdates();
         }
 
         function getSelectedText(id) {
@@ -630,6 +637,208 @@
             if (box) {
                 box.value = buildCompatibilitySummary();
             }
+        }
+
+        function normalizeVersionText(value) {
+            value = value || "";
+            return value.replace(/^\s*v/i, "").replace(/\s+$/g, "");
+        }
+
+        function compareVersions(left, right) {
+            var a = normalizeVersionText(left).split(".");
+            var b = normalizeVersionText(right).split(".");
+            var max = Math.max(a.length, b.length);
+
+            for (var i = 0; i < max; i++) {
+                var ai = parseInt(a[i] || "0", 10);
+                var bi = parseInt(b[i] || "0", 10);
+
+                if (isNaN(ai)) ai = 0;
+                if (isNaN(bi)) bi = 0;
+
+                if (ai > bi) return 1;
+                if (ai < bi) return -1;
+            }
+
+            return 0;
+        }
+
+        function getLatestZipAsset(release) {
+            if (!release || !release.assets) {
+                return null;
+            }
+
+            for (var i = 0; i < release.assets.length; i++) {
+                var asset = release.assets[i];
+                var assetName = asset && asset.name ? asset.name : "";
+
+                if (/\.zip$/i.test(assetName) && asset.browser_download_url) {
+                    return asset;
+                }
+            }
+
+            return null;
+        }
+
+        function setUpdateStatus(message, className) {
+            var status = document.getElementById("UpdateCheckStatus");
+
+            if (!status) {
+                return;
+            }
+
+            status.className = "update-check-status" + (className ? " " + className : "");
+            status.innerHTML = message;
+        }
+
+        function setUpdateActionsVisible(visible) {
+            var actions = document.getElementById("UpdateCheckActions");
+
+            if (actions) {
+                actions.style.display = visible ? "block" : "none";
+            }
+        }
+
+        function formatReleaseDate(value) {
+            if (!value) {
+                return "";
+            }
+
+            return value.substring(0, 10);
+        }
+
+        function escapeHtml(value) {
+            value = value || "";
+            return value
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function summarizeReleaseNotes(value) {
+            var text = value || "";
+            text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+            var lines = text.split("\n");
+            var kept = [];
+
+            for (var i = 0; i < lines.length && kept.length < 4; i++) {
+                var line = lines[i].replace(/^\s+|\s+$/g, "");
+
+                if (line !== "") {
+                    kept.push(escapeHtml(line));
+                }
+            }
+
+            return kept.join("<br />");
+        }
+
+        function renderUpdateResult(release) {
+            var latestTag = release && release.tag_name ? release.tag_name : "";
+            var latestVersion = normalizeVersionText(latestTag);
+            var releaseName = release && release.name ? release.name : latestTag;
+            var releaseDate = formatReleaseDate(release ? release.published_at : "");
+            var zipAsset = getLatestZipAsset(release);
+            var compare = compareVersions(latestVersion, CURRENT_NODE_VERSION);
+            var notes = summarizeReleaseNotes(release ? release.body : "");
+            var message = "";
+
+            latestReleaseUrl = release && release.html_url ? release.html_url : "";
+            latestReleaseZipUrl = zipAsset ? zipAsset.browser_download_url : "";
+
+            if (compare > 0) {
+                message += "<strong>Update available: " + escapeHtml(releaseName) + "</strong><br />";
+                message += "Current version: " + CURRENT_NODE_VERSION + "<br />";
+                message += "Latest version: " + escapeHtml(latestVersion);
+                if (releaseDate) message += " (" + releaseDate + ")";
+                if (zipAsset) message += "<br />Asset: " + escapeHtml(zipAsset.name);
+                message += "<br /><br />" + CURRENT_CHANGELOG_HTML;
+                if (notes) message += "<br /><br /><strong>Latest release notes:</strong><br />" + notes;
+
+                setUpdateStatus(message, "update-available");
+                setUpdateActionsVisible(true);
+            }
+            else {
+                message += "Advanced-FFmpeg is up to date. Current version: " + CURRENT_NODE_VERSION + ".";
+                if (releaseDate) message += "<br />Latest release checked: " + latestVersion + " (" + releaseDate + ").";
+                message += "<br /><br />" + CURRENT_CHANGELOG_HTML;
+
+                setUpdateStatus(message, "update-current");
+                setUpdateActionsVisible(false);
+            }
+        }
+
+        function checkForUpdates(force) {
+            var mode = document.getElementById("UpdateCheckMode");
+            var copyHint = document.getElementById("UpdateCheckCopyHint");
+
+            if (!force && (!mode || mode.value !== "on")) {
+                setUpdateStatus("Update checking is off.", "");
+                setUpdateActionsVisible(false);
+                return false;
+            }
+
+            if (copyHint) copyHint.innerHTML = "";
+            setUpdateStatus("Checking GitHub releases...", "");
+            setUpdateActionsVisible(false);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", UPDATE_CHECK_URL, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) {
+                    return;
+                }
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        renderUpdateResult(JSON.parse(xhr.responseText));
+                        UPDATE_CHECK_HAS_RUN = true;
+                    }
+                    catch (ex) {
+                        setUpdateStatus("Could not read the update response.", "update-error");
+                    }
+                }
+                else {
+                    setUpdateStatus("Could not check for updates. GitHub returned status " + xhr.status + ".", "update-error");
+                }
+            };
+            xhr.send(null);
+
+            return false;
+        }
+
+        function maybeAutoCheckForUpdates() {
+            var mode = document.getElementById("UpdateCheckMode");
+
+            if (mode && mode.value === "on" && !UPDATE_CHECK_HAS_RUN) {
+                checkForUpdates(false);
+            }
+            else if (!UPDATE_CHECK_HAS_RUN) {
+                setUpdateStatus("Update checking is off.", "");
+                setUpdateActionsVisible(false);
+            }
+        }
+
+        function openLatestRelease() {
+            if (latestReleaseUrl) {
+                window.open(latestReleaseUrl, "_blank");
+            }
+
+            return false;
+        }
+
+        function copyLatestZipUrl() {
+            var status = document.getElementById("UpdateCheckCopyHint");
+
+            if (window.clipboardData && latestReleaseZipUrl) {
+                window.clipboardData.setData("Text", latestReleaseZipUrl);
+                if (status) status.innerHTML = "Download URL copied.";
+            }
+            else if (status) {
+                status.innerHTML = latestReleaseZipUrl ? escapeHtml(latestReleaseZipUrl) : "No zip URL is available.";
+            }
+
+            return false;
         }
 
         function toggleGeneratedCommand() {
@@ -2635,6 +2844,7 @@
             { id: "CommandVisibility", title: "Generated Command", text: "Shows or hides this node's command preview. It is UI-only and does not add an FFmpeg argument." },
             { id: "DryRunMode", title: "Dry Run", text: "Runs a resolved FFmpeg test command that writes to the null muxer instead of creating the final output file. This checks decoding, filters, mapping, and encoding without delivering media.", url: FFMPEG_DOC_BASE + "ffmpeg-formats.html#null" },
             { id: "DryRunSaveBatch", title: "Dry Run Batch", text: "During execution, saves the resolved dry-run command as a .cmd file beside the planned media output, using the same base filename with a .cmd extension." },
+            { id: "UpdateCheckMode", title: "Check for Updates", text: "Checks the latest GitHub release only when enabled or when Check Now is clicked. It shows release links but does not download or install updates." },
             { id: "Theme", title: "Theme", text: "Changes only the editor appearance. It is UI-only and does not add an FFmpeg argument." },
             { id: "CompatibilitySummary", title: "Compatibility Summary", text: "Shows the selected container, codecs, filters, and warnings for settings that require re-encoding or are ignored by the current mode." },
             { id: "PresetJson", targetId: "PresetJsonImportBtn", title: "Preset JSON", text: "Exports and imports this node's saved UI settings as JSON. This is UI preset data, not an FFmpeg command option." }
@@ -3980,6 +4190,22 @@
             <option value="dark">Dark</option>
             <option value="contrast">High Contrast</option>
         </select><br />
+
+        <label class="ffas-label-left">Check for Updates:</label>
+        <select class="ffas-text-input" id="UpdateCheckMode" onchange="UPDATE_CHECK_HAS_RUN=false; maybeAutoCheckForUpdates();">
+            <option value="off" selected>Off</option>
+            <option value="on">On - check GitHub releases</option>
+        </select>
+        <input type="button" class="update-check-button" value="Check Now" onclick="return checkForUpdates(true)" /><br />
+
+        <div class="update-check-panel">
+            <div id="UpdateCheckStatus" class="update-check-status">Update checking is off.</div>
+            <div id="UpdateCheckActions" class="update-check-actions" style="display:none;">
+                <input type="button" value="Open Release Page" onclick="return openLatestRelease()" />
+                <input type="button" value="Copy Zip URL" onclick="return copyLatestZipUrl()" />
+                <span id="UpdateCheckCopyHint" class="update-check-copy-hint"></span>
+            </div>
+        </div>
 
         <hr>
 
